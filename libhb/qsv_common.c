@@ -33,6 +33,23 @@
 // QSV info about adapters
 static mfxAdaptersInfo qsv_adapters_info;
 static hb_list_t *qsv_adapters_list         = NULL;
+
+typedef struct hb_qsv_adapters_details
+{
+    // QSV info for each codec
+    hb_qsv_info_t *hb_qsv_info_avc;
+    hb_qsv_info_t *hb_qsv_info_hevc;
+    // API versions
+    mfxVersion qsv_software_version;
+    mfxVersion qsv_hardware_version;
+    // AVC implementations
+    hb_qsv_info_t qsv_software_info_avc;
+    hb_qsv_info_t qsv_hardware_info_avc;
+    // HEVC implementations
+    hb_qsv_info_t qsv_software_info_hevc;
+    hb_qsv_info_t qsv_hardware_info_hevc;
+} hb_qsv_adapters_details_t;
+
 // QSV info for each codec
 static hb_qsv_info_t *hb_qsv_info_avc       = NULL;
 static hb_qsv_info_t *hb_qsv_info_hevc      = NULL;
