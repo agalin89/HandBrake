@@ -44,7 +44,7 @@ void hb_qsv_force_workarounds(); // for developers only
 typedef struct hb_qsv_info_s
 {
     // each info struct only corresponds to one CodecId and implementation combo
-    const mfxU32  codec_id;
+    mfxU32  codec_id;
     mfxIMPL implementation;
 
     // whether the encoder is available for this implementation

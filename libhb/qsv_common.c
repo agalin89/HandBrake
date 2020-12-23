@@ -33,8 +33,9 @@
 // QSV info about adapters
 static mfxAdaptersInfo qsv_adapters_info;
 static hb_list_t *qsv_adapters_list         = NULL;
+static hb_list_t *qsv_adapters_details_list = NULL;
 
-typedef struct hb_qsv_adapters_details
+typedef struct hb_qsv_adapter_details
 {
     // QSV info for each codec
     hb_qsv_info_t *hb_qsv_info_avc;
@@ -48,7 +49,33 @@ typedef struct hb_qsv_adapters_details
     // HEVC implementations
     hb_qsv_info_t qsv_software_info_hevc;
     hb_qsv_info_t qsv_hardware_info_hevc;
-} hb_qsv_adapters_details_t;
+} hb_qsv_adapter_details_t;
+
+static void init_adapter_details(hb_qsv_adapter_details_t *adapter_details)
+{
+    // QSV info for each codec
+    adapter_details->hb_qsv_info_avc                       = NULL;
+    adapter_details->hb_qsv_info_hevc                      = NULL;
+    // API versions
+    adapter_details->qsv_software_version.Version          = 0;
+    adapter_details->qsv_hardware_version.Version          = 0;
+    // AVC implementations
+    adapter_details->qsv_software_info_avc.available       = 0;
+    adapter_details->qsv_software_info_avc.codec_id        = MFX_CODEC_AVC;
+    adapter_details->qsv_software_info_avc.implementation  = MFX_IMPL_SOFTWARE;
+
+    adapter_details->qsv_hardware_info_avc.available       = 0;
+    adapter_details->qsv_hardware_info_avc.codec_id        = MFX_CODEC_AVC;
+    adapter_details->qsv_hardware_info_avc.implementation  = MFX_IMPL_HARDWARE_ANY|MFX_IMPL_VIA_ANY;
+    // HEVC implementations
+    adapter_details->qsv_software_info_hevc.available      = 0;
+    adapter_details->qsv_software_info_hevc.codec_id       = MFX_CODEC_HEVC;
+    adapter_details->qsv_software_info_hevc.implementation = MFX_IMPL_SOFTWARE;
+
+    adapter_details->qsv_hardware_info_hevc.available      = 0;
+    adapter_details->qsv_hardware_info_hevc.codec_id       = MFX_CODEC_HEVC;
+    adapter_details->qsv_hardware_info_hevc.implementation = MFX_IMPL_HARDWARE_ANY|MFX_IMPL_VIA_ANY;
+}
 
 // QSV info for each codec
 static hb_qsv_info_t *hb_qsv_info_avc       = NULL;
@@ -684,8 +711,103 @@ hb_display_t * hb_qsv_display_init(void)
 
 #if !defined(SYS_LINUX) && !defined(SYS_FREEBSD)
 static int hb_qsv_make_adapters_list(const mfxAdaptersInfo* adapters_info, hb_list_t **qsv_adapters_list);
+static int hb_qsv_make_adapters_details_list(const mfxAdaptersInfo* adapters_info, hb_list_t **hb_qsv_adapter_details_list);
 static int hb_qsv_query_adapters(mfxAdaptersInfo* adapters_info);
 #endif
+
+static int hb_qsv_collect_adapters_details(hb_list_t *hb_qsv_adapter_details_list)
+{
+    hb_log("hb_qsv_collect_adapters_details");
+    for (int i = 0; i < hb_list_count(hb_qsv_adapter_details_list); i++)
+    {
+        hb_qsv_adapter_details_t *details = hb_list_item(hb_qsv_adapter_details_list, i);
+        hb_log("hb_qsv_collect_adapters_details: index=%d", i);
+        hb_log("hb_qsv_collect_adapters_details: details->qsv_software_info_avc.available=%d", details->qsv_software_info_avc.available);
+    }
+    hb_log("hb_qsv_collect_adapters_details end");
+    return 0;
+    /*
+     * First, check for any MSDK version to determine whether one or
+     * more implementations are present; then check if we can use them.
+     *
+     * I've had issues using a NULL version with some combinations of
+     * hardware and driver, so use a low version number (1.0) instead.
+     */
+    mfxSession session;
+    mfxVersion version = { .Major = 1, .Minor = 0, };
+#if defined(SYS_LINUX) || defined(SYS_FREEBSD)
+    mfxIMPL hw_preference = MFX_IMPL_VIA_ANY;
+#else
+    mfxIMPL hw_preference = MFX_IMPL_VIA_D3D11;
+#endif
+    // check for software fallback
+    if (MFXInit(MFX_IMPL_SOFTWARE, &version, &session) == MFX_ERR_NONE)
+    {
+        // Media SDK software found, but check that our minimum is supported
+        MFXQueryVersion(session, &qsv_software_version);
+        if (HB_CHECK_MFX_VERSION(qsv_software_version,
+                                 HB_QSV_MINVERSION_MAJOR,
+                                 HB_QSV_MINVERSION_MINOR))
+        {
+            query_capabilities(session, qsv_software_version, &qsv_software_info_avc, &qsv_adapters_info);
+            query_capabilities(session, qsv_software_version, &qsv_software_info_hevc, &qsv_adapters_info);
+            // now that we know which hardware encoders are
+            // available, we can set the preferred implementation
+            hb_qsv_impl_set_preferred("software");
+        }
+        MFXClose(session);
+    }
+
+    // check for actual hardware support
+    do{
+        if (MFXInit(MFX_IMPL_HARDWARE_ANY | hw_preference, &version, &session) == MFX_ERR_NONE)
+        {
+            // On linux, the handle to the VA display must be set.
+            // This code is essentiall a NOP other platforms.
+            hb_display_t * display = hb_qsv_display_init();
+
+            if (display != NULL)
+            {
+                MFXVideoCORE_SetHandle(session, display->mfxType,
+                                       (mfxHDL)display->handle);
+            }
+            // Media SDK hardware found, but check that our minimum is supported
+            //
+            // Note: this-party hardware (QSV_G0) is unsupported for the time being
+            MFXQueryVersion(session, &qsv_hardware_version);
+            if (qsv_hardware_generation(hb_get_cpu_platform()) >= QSV_G1 &&
+                HB_CHECK_MFX_VERSION(qsv_hardware_version,
+                                     HB_QSV_MINVERSION_MAJOR,
+                                     HB_QSV_MINVERSION_MINOR))
+            {
+                query_capabilities(session, qsv_hardware_version, &qsv_hardware_info_avc, &qsv_adapters_info);
+                qsv_hardware_info_avc.implementation = MFX_IMPL_HARDWARE_ANY | hw_preference;
+                query_capabilities(session, qsv_hardware_version, &qsv_hardware_info_hevc, &qsv_adapters_info);
+                qsv_hardware_info_hevc.implementation = MFX_IMPL_HARDWARE_ANY | hw_preference;
+                // now that we know which hardware encoders are
+                // available, we can set the preferred implementation
+                hb_qsv_impl_set_preferred("hardware");
+            }
+            hb_display_close(&display);
+            MFXClose(session);
+            hw_preference = 0;
+        }
+        else
+        {
+#if !defined(SYS_LINUX) && !defined(SYS_FREEBSD)
+            // Windows only: After D3D11 we will try D3D9
+            if (hw_preference == MFX_IMPL_VIA_D3D11)
+                hw_preference = MFX_IMPL_VIA_D3D9;
+            else
+#endif
+                hw_preference = 0;
+        }
+    }
+    while(hw_preference != 0);
+
+    // success
+    return 0;
+}
 
 int hb_qsv_info_init()
 {
@@ -702,11 +824,15 @@ int hb_qsv_info_init()
     int err = hb_qsv_query_adapters(&qsv_adapters_info);
     if (!err)
     {
+        hb_log("hb_qsv_info_init");
         hb_qsv_make_adapters_list(&qsv_adapters_info, &qsv_adapters_list);
+        hb_qsv_make_adapters_details_list(&qsv_adapters_info, &qsv_adapters_details_list);
+        hb_qsv_collect_adapters_details(qsv_adapters_details_list);
     }
     else
     {
         hb_error("hb_qsv_info_init: failed to query qsv adapters");
+        return 1;
     }
 #endif
     /*
@@ -723,7 +849,6 @@ int hb_qsv_info_init()
 #else
     mfxIMPL hw_preference = MFX_IMPL_VIA_D3D11;
 #endif
-
     // check for software fallback
     if (MFXInit(MFX_IMPL_SOFTWARE, &version, &session) == MFX_ERR_NONE)
     {
@@ -2918,6 +3043,40 @@ static int hb_qsv_make_adapters_list(const mfxAdaptersInfo* adapters_info, hb_li
         }
     }
     *qsv_adapters_list = list;
+    return 0;
+}
+
+static int hb_qsv_make_adapters_details_list(const mfxAdaptersInfo* adapters_info, hb_list_t **hb_qsv_adapters_details_list)
+{
+    hb_log("hb_qsv_make_adapters_details_list");
+    if (!qsv_adapters_list)
+    {
+        hb_error("hb_qsv_make_adapters_details_list: destination pointer is NULL");
+        return -1;
+    }
+    if (*hb_qsv_adapters_details_list)
+    {
+        hb_error("hb_qsv_make_adapters_details_list: hb_qsv_adapter_details_list is allocated already");
+        return -1;
+    }
+    hb_list_t *list = hb_list_init();
+    if (list == NULL)
+    {
+        hb_error("hb_qsv_make_adapters_details_list: hb_list_init() failed");
+        return -1;
+    }
+    for (int i = 0; i < adapters_info->NumActual; i++)
+    {
+        mfxAdapterInfo* info = &adapters_info->Adapters[i];
+        if (info)
+        {
+            hb_qsv_adapter_details_t* adapter_details = av_mallocz(sizeof(hb_qsv_adapter_details_t));
+            init_adapter_details(adapter_details);
+            hb_list_add(list, (void*)adapter_details);
+        }
+    }
+    *hb_qsv_adapters_details_list = list;
+    hb_log("hb_qsv_make_adapters_details_list end");
     return 0;
 }
 
