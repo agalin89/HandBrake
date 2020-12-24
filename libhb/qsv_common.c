@@ -30,11 +30,6 @@
 #include "libavutil/hwcontext.h"
 #include "mfx/mfxadapter.h"
 
-// QSV info about adapters
-static mfxAdaptersInfo qsv_adapters_info;
-static hb_list_t *qsv_adapters_list         = NULL;
-static hb_list_t *qsv_adapters_details_list = NULL;
-
 typedef struct hb_qsv_adapter_details
 {
     // QSV info for each codec
@@ -50,6 +45,13 @@ typedef struct hb_qsv_adapter_details
     hb_qsv_info_t qsv_software_info_hevc;
     hb_qsv_info_t qsv_hardware_info_hevc;
 } hb_qsv_adapter_details_t;
+
+// QSV info about adapters
+static mfxAdaptersInfo qsv_adapters_info;
+static hb_list_t *qsv_adapters_list         = NULL;
+static hb_list_t *qsv_adapters_details_list = NULL;
+// TODO: remove static structures
+static hb_qsv_adapter_details_t *g_adapter_details = NULL;
 
 static void init_adapter_details(hb_qsv_adapter_details_t *adapter_details)
 {
@@ -76,19 +78,6 @@ static void init_adapter_details(hb_qsv_adapter_details_t *adapter_details)
     adapter_details->qsv_hardware_info_hevc.codec_id       = MFX_CODEC_HEVC;
     adapter_details->qsv_hardware_info_hevc.implementation = MFX_IMPL_HARDWARE_ANY|MFX_IMPL_VIA_ANY;
 }
-
-// QSV info for each codec
-static hb_qsv_info_t *hb_qsv_info_avc       = NULL;
-static hb_qsv_info_t *hb_qsv_info_hevc      = NULL;
-// API versions
-static mfxVersion qsv_software_version      = { .Version   = 0, };
-static mfxVersion qsv_hardware_version      = { .Version   = 0, };
-// AVC implementations
-static hb_qsv_info_t qsv_software_info_avc  = { .available = 0, .codec_id = MFX_CODEC_AVC,  .implementation = MFX_IMPL_SOFTWARE, };
-static hb_qsv_info_t qsv_hardware_info_avc  = { .available = 0, .codec_id = MFX_CODEC_AVC,  .implementation = MFX_IMPL_HARDWARE_ANY|MFX_IMPL_VIA_ANY, };
-// HEVC implementations
-static hb_qsv_info_t qsv_software_info_hevc = { .available = 0, .codec_id = MFX_CODEC_HEVC, .implementation = MFX_IMPL_SOFTWARE, };
-static hb_qsv_info_t qsv_hardware_info_hevc = { .available = 0, .codec_id = MFX_CODEC_HEVC, .implementation = MFX_IMPL_HARDWARE_ANY|MFX_IMPL_VIA_ANY, };
 
 // QSV-supported profile and level lists (not all exposed to the user)
 static hb_triplet_t hb_qsv_h264_profiles[] =
@@ -210,12 +199,12 @@ int hb_qsv_video_encoder_is_enabled(int encoder)
     switch (encoder)
     {
         case HB_VCODEC_QSV_H264:
-            return hb_qsv_info_avc != NULL && hb_qsv_info_avc->available;
+            return g_adapter_details->hb_qsv_info_avc != NULL && g_adapter_details->hb_qsv_info_avc->available;
         case HB_VCODEC_QSV_H265_10BIT:
             if (qsv_hardware_generation(hb_get_cpu_platform()) < QSV_G6)
                 return 0;
         case HB_VCODEC_QSV_H265:
-            return hb_qsv_info_hevc != NULL && hb_qsv_info_hevc->available;
+            return g_adapter_details->hb_qsv_info_hevc != NULL && g_adapter_details->hb_qsv_info_hevc->available;
         default:
             return 0;
     }
@@ -316,6 +305,7 @@ static void init_ext_coding_option2(mfxExtCodingOption2 *extCodingOption2)
 
 static int query_capabilities(mfxSession session, mfxVersion version, hb_qsv_info_t *info, mfxAdaptersInfo* adapters_info)
 {
+    hb_log("query_capabilities");
     /*
      * MFXVideoENCODE_Query(mfxSession, mfxVideoParam *in, mfxVideoParam *out);
      *
@@ -421,9 +411,11 @@ static int query_capabilities(mfxSession session, mfxVersion version, hb_qsv_inf
                 {
                     info->capabilities |= HB_QSV_CAP_B_REF_PYRAMID;
                 }
+                hb_log("HB_QSV_CAP_LOWPOWER_ENCODE before");
                 if (info->codec_id == MFX_CODEC_HEVC &&
                     (qsv_hardware_generation(hb_get_cpu_platform()) >= QSV_G7))
                 {
+                    hb_log("HB_QSV_CAP_LOWPOWER_ENCODE");
                     info->capabilities |= HB_QSV_CAP_LOWPOWER_ENCODE;
                 }
 #if !defined(SYS_LINUX) && !defined(SYS_FREEBSD)
@@ -715,97 +707,157 @@ static int hb_qsv_make_adapters_details_list(const mfxAdaptersInfo* adapters_inf
 static int hb_qsv_query_adapters(mfxAdaptersInfo* adapters_info);
 #endif
 
-static int hb_qsv_collect_adapters_details(hb_list_t *hb_qsv_adapter_details_list)
+mfxIMPL hb_qsv_dx_index_to_impl(int dx_index)
+{
+    mfxIMPL impl;
+
+    switch (dx_index)
+    {
+        {
+        case 0:
+            impl = MFX_IMPL_HARDWARE;
+            break;
+        case 1:
+            impl = MFX_IMPL_HARDWARE2;
+            break;
+        case 2:
+            impl = MFX_IMPL_HARDWARE3;
+            break;
+        case 3:
+            impl = MFX_IMPL_HARDWARE4;
+            break;
+
+        default:
+            // try searching on all display adapters
+            impl = MFX_IMPL_HARDWARE_ANY;
+            break;
+        }
+    }
+    return impl;
+}
+
+static int hb_qsv_impl_set_preferred(hb_qsv_adapter_details_t *details, const char *name)
+{
+    if (name == NULL)
+    {
+        return -1;
+    }
+    if (!strcasecmp(name, "software"))
+    {
+        if (details->qsv_software_info_avc.available)
+        {
+            details->hb_qsv_info_avc = &details->qsv_software_info_avc;
+        }
+        if (details->qsv_software_info_hevc.available)
+        {
+            details->hb_qsv_info_hevc = &details->qsv_software_info_hevc;
+        }
+        return 0;
+    }
+    if (!strcasecmp(name, "hardware"))
+    {
+        if (details->qsv_hardware_info_avc.available)
+        {
+            details->hb_qsv_info_avc = &details->qsv_hardware_info_avc;
+        }
+        if (details->qsv_hardware_info_hevc.available)
+        {
+            details->hb_qsv_info_hevc = &details->qsv_hardware_info_hevc;
+        }
+        return 0;
+    }
+    return -1;
+}
+
+static int hb_qsv_collect_adapters_details(hb_list_t *qsv_adapters_list, hb_list_t *hb_qsv_adapter_details_list)
 {
     hb_log("hb_qsv_collect_adapters_details");
     for (int i = 0; i < hb_list_count(hb_qsv_adapter_details_list); i++)
     {
+        int *dx_index = (int *)hb_list_item(qsv_adapters_list, i);
         hb_qsv_adapter_details_t *details = hb_list_item(hb_qsv_adapter_details_list, i);
-        hb_log("hb_qsv_collect_adapters_details: index=%d", i);
-        hb_log("hb_qsv_collect_adapters_details: details->qsv_software_info_avc.available=%d", details->qsv_software_info_avc.available);
-    }
-    hb_log("hb_qsv_collect_adapters_details end");
-    return 0;
-    /*
-     * First, check for any MSDK version to determine whether one or
-     * more implementations are present; then check if we can use them.
-     *
-     * I've had issues using a NULL version with some combinations of
-     * hardware and driver, so use a low version number (1.0) instead.
-     */
-    mfxSession session;
-    mfxVersion version = { .Major = 1, .Minor = 0, };
+        hb_log("hb_qsv_collect_adapters_details: dx index %d", *dx_index);
+        /*
+        * First, check for any MSDK version to determine whether one or
+        * more implementations are present; then check if we can use them.
+        *
+        * I've had issues using a NULL version with some combinations of
+        * hardware and driver, so use a low version number (1.0) instead.
+        */
+        mfxSession session;
+        mfxVersion version = { .Major = 1, .Minor = 0, };
 #if defined(SYS_LINUX) || defined(SYS_FREEBSD)
-    mfxIMPL hw_preference = MFX_IMPL_VIA_ANY;
+        mfxIMPL hw_preference = MFX_IMPL_VIA_ANY;
 #else
-    mfxIMPL hw_preference = MFX_IMPL_VIA_D3D11;
+        mfxIMPL hw_preference = MFX_IMPL_VIA_D3D11;
 #endif
-    // check for software fallback
-    if (MFXInit(MFX_IMPL_SOFTWARE, &version, &session) == MFX_ERR_NONE)
-    {
-        // Media SDK software found, but check that our minimum is supported
-        MFXQueryVersion(session, &qsv_software_version);
-        if (HB_CHECK_MFX_VERSION(qsv_software_version,
-                                 HB_QSV_MINVERSION_MAJOR,
-                                 HB_QSV_MINVERSION_MINOR))
+        // check for software fallback
+        if (MFXInit(MFX_IMPL_SOFTWARE, &version, &session) == MFX_ERR_NONE)
         {
-            query_capabilities(session, qsv_software_version, &qsv_software_info_avc, &qsv_adapters_info);
-            query_capabilities(session, qsv_software_version, &qsv_software_info_hevc, &qsv_adapters_info);
-            // now that we know which hardware encoders are
-            // available, we can set the preferred implementation
-            hb_qsv_impl_set_preferred("software");
-        }
-        MFXClose(session);
-    }
-
-    // check for actual hardware support
-    do{
-        if (MFXInit(MFX_IMPL_HARDWARE_ANY | hw_preference, &version, &session) == MFX_ERR_NONE)
-        {
-            // On linux, the handle to the VA display must be set.
-            // This code is essentiall a NOP other platforms.
-            hb_display_t * display = hb_qsv_display_init();
-
-            if (display != NULL)
+            // Media SDK software found, but check that our minimum is supported
+            MFXQueryVersion(session, &details->qsv_software_version);
+            if (HB_CHECK_MFX_VERSION(details->qsv_software_version,
+                                    HB_QSV_MINVERSION_MAJOR,
+                                    HB_QSV_MINVERSION_MINOR))
             {
-                MFXVideoCORE_SetHandle(session, display->mfxType,
-                                       (mfxHDL)display->handle);
-            }
-            // Media SDK hardware found, but check that our minimum is supported
-            //
-            // Note: this-party hardware (QSV_G0) is unsupported for the time being
-            MFXQueryVersion(session, &qsv_hardware_version);
-            if (qsv_hardware_generation(hb_get_cpu_platform()) >= QSV_G1 &&
-                HB_CHECK_MFX_VERSION(qsv_hardware_version,
-                                     HB_QSV_MINVERSION_MAJOR,
-                                     HB_QSV_MINVERSION_MINOR))
-            {
-                query_capabilities(session, qsv_hardware_version, &qsv_hardware_info_avc, &qsv_adapters_info);
-                qsv_hardware_info_avc.implementation = MFX_IMPL_HARDWARE_ANY | hw_preference;
-                query_capabilities(session, qsv_hardware_version, &qsv_hardware_info_hevc, &qsv_adapters_info);
-                qsv_hardware_info_hevc.implementation = MFX_IMPL_HARDWARE_ANY | hw_preference;
+                query_capabilities(session, details->qsv_software_version, &details->qsv_software_info_avc, &qsv_adapters_info);
+                query_capabilities(session, details->qsv_software_version, &details->qsv_software_info_hevc, &qsv_adapters_info);
                 // now that we know which hardware encoders are
                 // available, we can set the preferred implementation
-                hb_qsv_impl_set_preferred("hardware");
+                hb_qsv_impl_set_preferred(details, "software");
             }
-            hb_display_close(&display);
             MFXClose(session);
-            hw_preference = 0;
         }
-        else
-        {
-#if !defined(SYS_LINUX) && !defined(SYS_FREEBSD)
-            // Windows only: After D3D11 we will try D3D9
-            if (hw_preference == MFX_IMPL_VIA_D3D11)
-                hw_preference = MFX_IMPL_VIA_D3D9;
-            else
-#endif
-                hw_preference = 0;
-        }
-    }
-    while(hw_preference != 0);
+        // check for actual hardware support
+        do{
+            if (MFXInit(hb_qsv_dx_index_to_impl(*dx_index) | hw_preference, &version, &session) == MFX_ERR_NONE)
+            {
+                // On linux, the handle to the VA display must be set.
+                // This code is essentiall a NOP other platforms.
+                hb_display_t * display = hb_qsv_display_init();
 
-    // success
+                if (display != NULL)
+                {
+                    MFXVideoCORE_SetHandle(session, display->mfxType,
+                                        (mfxHDL)display->handle);
+                }
+                // Media SDK hardware found, but check that our minimum is supported
+                //
+                // Note: this-party hardware (QSV_G0) is unsupported for the time being
+                MFXQueryVersion(session, &details->qsv_hardware_version);
+                if (qsv_hardware_generation(hb_get_cpu_platform()) >= QSV_G1 &&
+                    HB_CHECK_MFX_VERSION(details->qsv_hardware_version,
+                                        HB_QSV_MINVERSION_MAJOR,
+                                        HB_QSV_MINVERSION_MINOR))
+                {
+                    query_capabilities(session, details->qsv_hardware_version, &details->qsv_hardware_info_avc, &qsv_adapters_info);
+                    details->qsv_hardware_info_avc.implementation = hb_qsv_dx_index_to_impl(*dx_index) | hw_preference;
+                    query_capabilities(session, details->qsv_hardware_version, &details->qsv_hardware_info_hevc, &qsv_adapters_info);
+                    details->qsv_hardware_info_hevc.implementation = hb_qsv_dx_index_to_impl(*dx_index) | hw_preference;
+                    // now that we know which hardware encoders are
+                    // available, we can set the preferred implementation
+                    hb_qsv_impl_set_preferred(details, "hardware");
+                }
+                hb_display_close(&display);
+                MFXClose(session);
+                hw_preference = 0;
+            }
+            else
+            {
+#if !defined(SYS_LINUX) && !defined(SYS_FREEBSD)
+                // Windows only: After D3D11 we will try D3D9
+                if (hw_preference == MFX_IMPL_VIA_D3D11)
+                    hw_preference = MFX_IMPL_VIA_D3D9;
+                else
+#endif
+                    hw_preference = 0;
+            }
+        }
+        while(hw_preference != 0);
+        // TODO: set preferred use only latest adapters details in static structures
+        g_adapter_details = details;
+    }
+    hb_log("hb_qsv_collect_adapters_details end");
     return 0;
 }
 
@@ -827,7 +879,8 @@ int hb_qsv_info_init()
         hb_log("hb_qsv_info_init");
         hb_qsv_make_adapters_list(&qsv_adapters_info, &qsv_adapters_list);
         hb_qsv_make_adapters_details_list(&qsv_adapters_info, &qsv_adapters_details_list);
-        hb_qsv_collect_adapters_details(qsv_adapters_details_list);
+        // TODO: works only on Windows
+        hb_qsv_collect_adapters_details(qsv_adapters_list, qsv_adapters_details_list);
     }
     else
     {
@@ -835,86 +888,6 @@ int hb_qsv_info_init()
         return 1;
     }
 #endif
-    /*
-     * First, check for any MSDK version to determine whether one or
-     * more implementations are present; then check if we can use them.
-     *
-     * I've had issues using a NULL version with some combinations of
-     * hardware and driver, so use a low version number (1.0) instead.
-     */
-    mfxSession session;
-    mfxVersion version = { .Major = 1, .Minor = 0, };
-#if defined(SYS_LINUX) || defined(SYS_FREEBSD)
-    mfxIMPL hw_preference = MFX_IMPL_VIA_ANY;
-#else
-    mfxIMPL hw_preference = MFX_IMPL_VIA_D3D11;
-#endif
-    // check for software fallback
-    if (MFXInit(MFX_IMPL_SOFTWARE, &version, &session) == MFX_ERR_NONE)
-    {
-        // Media SDK software found, but check that our minimum is supported
-        MFXQueryVersion(session, &qsv_software_version);
-        if (HB_CHECK_MFX_VERSION(qsv_software_version,
-                                 HB_QSV_MINVERSION_MAJOR,
-                                 HB_QSV_MINVERSION_MINOR))
-        {
-            query_capabilities(session, qsv_software_version, &qsv_software_info_avc, &qsv_adapters_info);
-            query_capabilities(session, qsv_software_version, &qsv_software_info_hevc, &qsv_adapters_info);
-            // now that we know which hardware encoders are
-            // available, we can set the preferred implementation
-            hb_qsv_impl_set_preferred("software");
-        }
-        MFXClose(session);
-    }
-
-    // check for actual hardware support
-    do{
-        if (MFXInit(MFX_IMPL_HARDWARE_ANY | hw_preference, &version, &session) == MFX_ERR_NONE)
-        {
-            // On linux, the handle to the VA display must be set.
-            // This code is essentiall a NOP other platforms.
-            hb_display_t * display = hb_qsv_display_init();
-
-            if (display != NULL)
-            {
-                MFXVideoCORE_SetHandle(session, display->mfxType,
-                                       (mfxHDL)display->handle);
-            }
-            // Media SDK hardware found, but check that our minimum is supported
-            //
-            // Note: this-party hardware (QSV_G0) is unsupported for the time being
-            MFXQueryVersion(session, &qsv_hardware_version);
-            if (qsv_hardware_generation(hb_get_cpu_platform()) >= QSV_G1 &&
-                HB_CHECK_MFX_VERSION(qsv_hardware_version,
-                                     HB_QSV_MINVERSION_MAJOR,
-                                     HB_QSV_MINVERSION_MINOR))
-            {
-                query_capabilities(session, qsv_hardware_version, &qsv_hardware_info_avc, &qsv_adapters_info);
-                qsv_hardware_info_avc.implementation = MFX_IMPL_HARDWARE_ANY | hw_preference;
-                query_capabilities(session, qsv_hardware_version, &qsv_hardware_info_hevc, &qsv_adapters_info);
-                qsv_hardware_info_hevc.implementation = MFX_IMPL_HARDWARE_ANY | hw_preference;
-                // now that we know which hardware encoders are
-                // available, we can set the preferred implementation
-                hb_qsv_impl_set_preferred("hardware");
-            }
-            hb_display_close(&display);
-            MFXClose(session);
-            hw_preference = 0;
-        }
-        else
-        {
-#if !defined(SYS_LINUX) && !defined(SYS_FREEBSD)
-            // Windows only: After D3D11 we will try D3D9
-            if (hw_preference == MFX_IMPL_VIA_D3D11)
-                hw_preference = MFX_IMPL_VIA_D3D9;
-            else
-#endif
-                hw_preference = 0;
-        }
-    }
-    while(hw_preference != 0);
-
-    // success
     return 0;
 }
 
@@ -1000,6 +973,66 @@ static void log_capabilities(int log_level, uint64_t caps, const char *prefix)
                 strnlen(buffer, 1) ? buffer : " standard feature set");
 }
 
+static void hb_qsv_adapter_info_print(hb_qsv_adapter_details_t *adapter_details)
+{
+    if (adapter_details->qsv_hardware_version.Version)
+    {
+        hb_log(" - Intel Media SDK hardware: API %"PRIu16".%"PRIu16" (minimum: %"PRIu16".%"PRIu16")",
+                adapter_details->qsv_hardware_version.Major, adapter_details->qsv_hardware_version.Minor,
+                HB_QSV_MINVERSION_MAJOR, HB_QSV_MINVERSION_MINOR);
+    }
+
+    if (adapter_details->qsv_software_version.Version)
+    {
+        hb_log(" - Intel Media SDK software: API %"PRIu16".%"PRIu16" (minimum: %"PRIu16".%"PRIu16")",
+                adapter_details->qsv_software_version.Major, adapter_details->qsv_software_version.Minor,
+                HB_QSV_MINVERSION_MAJOR, HB_QSV_MINVERSION_MINOR);
+    }
+
+    if (adapter_details->hb_qsv_info_avc != NULL && adapter_details->hb_qsv_info_avc->available)
+    {
+        hb_log(" - H.264 encoder: yes");
+        hb_log("    - preferred implementation: %s %s",
+                hb_qsv_impl_get_name(adapter_details->hb_qsv_info_avc->implementation),
+                hb_qsv_impl_get_via_name(adapter_details->hb_qsv_info_avc->implementation));
+        if (adapter_details->qsv_hardware_info_avc.available)
+        {
+            log_capabilities(1, adapter_details->qsv_hardware_info_avc.capabilities,
+                                "    - capabilities (hardware): ");
+        }
+        if (adapter_details->qsv_software_info_avc.available)
+        {
+            log_capabilities(1, adapter_details->qsv_software_info_avc.capabilities,
+                                "    - capabilities (software): ");
+        }
+        else
+        {
+            hb_log(" - H.264 encoder: no");
+        }
+        if (adapter_details->hb_qsv_info_hevc != NULL && adapter_details->hb_qsv_info_hevc->available)
+        {
+            hb_log(" - H.265 encoder: yes (8bit: yes, 10bit: %s)", (qsv_hardware_generation(hb_get_cpu_platform()) < QSV_G6) ? "no" : "yes" );
+            hb_log("    - preferred implementation: %s %s",
+                   hb_qsv_impl_get_name(adapter_details->hb_qsv_info_hevc->implementation),
+                   hb_qsv_impl_get_via_name(adapter_details->hb_qsv_info_hevc->implementation));
+            if (adapter_details->qsv_hardware_info_hevc.available)
+            {
+                log_capabilities(1, adapter_details->qsv_hardware_info_hevc.capabilities,
+                                 "    - capabilities (hardware): ");
+            }
+            if (adapter_details->qsv_software_info_hevc.available)
+            {
+                log_capabilities(1, adapter_details->qsv_software_info_hevc.capabilities,
+                                 "    - capabilities (software): ");
+            }
+        }
+        else
+        {
+            hb_log(" - H.265 encoder: no");
+        }
+    }
+}
+
 void hb_qsv_info_print()
 {
     // is QSV available and usable?
@@ -1025,62 +1058,13 @@ void hb_qsv_info_print()
         {
             hb_log("Intel Quick Sync Video support: yes");
         }
-        // also print the details
-        if (qsv_hardware_version.Version)
+        // also print the details about all QSV adapters
+        for (int i = 0; i < hb_list_count(qsv_adapters_details_list); i++)
         {
-            hb_log(" - Intel Media SDK hardware: API %"PRIu16".%"PRIu16" (minimum: %"PRIu16".%"PRIu16")",
-                   qsv_hardware_version.Major, qsv_hardware_version.Minor,
-                   HB_QSV_MINVERSION_MAJOR,    HB_QSV_MINVERSION_MINOR);
-        }
-
-        if (qsv_software_version.Version)
-        {
-            hb_log(" - Intel Media SDK software: API %"PRIu16".%"PRIu16" (minimum: %"PRIu16".%"PRIu16")",
-                   qsv_software_version.Major, qsv_software_version.Minor,
-                   HB_QSV_MINVERSION_MAJOR,    HB_QSV_MINVERSION_MINOR);
-        }
-
-        if (hb_qsv_info_avc != NULL && hb_qsv_info_avc->available)
-        {
-            hb_log(" - H.264 encoder: yes");
-            hb_log("    - preferred implementation: %s %s",
-                   hb_qsv_impl_get_name(hb_qsv_info_avc->implementation),
-                   hb_qsv_impl_get_via_name(hb_qsv_info_avc->implementation));
-            if (qsv_hardware_info_avc.available)
-            {
-                log_capabilities(1, qsv_hardware_info_avc.capabilities,
-                                 "    - capabilities (hardware): ");
-            }
-            if (qsv_software_info_avc.available)
-            {
-                log_capabilities(1, qsv_software_info_avc.capabilities,
-                                 "    - capabilities (software): ");
-            }
-        }
-        else
-        {
-            hb_log(" - H.264 encoder: no");
-        }
-        if (hb_qsv_info_hevc != NULL && hb_qsv_info_hevc->available)
-        {
-            hb_log(" - H.265 encoder: yes (8bit: yes, 10bit: %s)", (qsv_hardware_generation(hb_get_cpu_platform()) < QSV_G6) ? "no" : "yes" );
-            hb_log("    - preferred implementation: %s %s",
-                   hb_qsv_impl_get_name(hb_qsv_info_hevc->implementation),
-                   hb_qsv_impl_get_via_name(hb_qsv_info_hevc->implementation));
-            if (qsv_hardware_info_hevc.available)
-            {
-                log_capabilities(1, qsv_hardware_info_hevc.capabilities,
-                                 "    - capabilities (hardware): ");
-            }
-            if (qsv_software_info_hevc.available)
-            {
-                log_capabilities(1, qsv_software_info_hevc.capabilities,
-                                 "    - capabilities (software): ");
-            }
-        }
-        else
-        {
-            hb_log(" - H.265 encoder: no");
+            int *dx_index = (int *)hb_list_item(qsv_adapters_list, i);
+            hb_qsv_adapter_details_t *details = hb_list_item(qsv_adapters_details_list, i);
+            hb_log("Intel Quick Sync Video adapter with dx index %d", *dx_index);
+            hb_qsv_adapter_info_print(details);
         }
     }
     else
@@ -1091,13 +1075,14 @@ void hb_qsv_info_print()
 
 hb_qsv_info_t* hb_qsv_info_get(int encoder)
 {
+    hb_log("hb_qsv_info_get: g_adapter_details->hb_qsv_info_avc=%p, g_adapter_details->hb_qsv_info_hevc=%p", g_adapter_details->hb_qsv_info_avc, g_adapter_details->hb_qsv_info_hevc);
     switch (encoder)
     {
         case HB_VCODEC_QSV_H264:
-            return hb_qsv_info_avc;
+            return g_adapter_details->hb_qsv_info_avc;
         case HB_VCODEC_QSV_H265_10BIT:
         case HB_VCODEC_QSV_H265:
-            return hb_qsv_info_hevc;
+            return g_adapter_details->hb_qsv_info_hevc;
         default:
             return NULL;
     }
@@ -1229,7 +1214,7 @@ int hb_qsv_copyframe_is_slow(int encoder)
     {
         // we should really check the driver version, but since it's not
         // available, checking the API version is the best we can do :-(
-        return !HB_CHECK_MFX_VERSION(qsv_hardware_version, 1, 7);
+        return !HB_CHECK_MFX_VERSION(g_adapter_details->qsv_hardware_version, 1, 7);
     }
     return 0;
 }
@@ -2013,12 +1998,12 @@ const char* hb_qsv_video_quality_get_name(uint32_t codec)
     switch (codec)
     {
         case HB_VCODEC_QSV_H264:
-            if (hb_qsv_info_avc != NULL) caps = hb_qsv_info_avc->capabilities;
+            if (g_adapter_details->hb_qsv_info_avc != NULL) caps = g_adapter_details->hb_qsv_info_avc->capabilities;
             break;
 
         case HB_VCODEC_QSV_H265_10BIT:
         case HB_VCODEC_QSV_H265:
-            if (hb_qsv_info_hevc != NULL) caps = hb_qsv_info_hevc->capabilities;
+            if (g_adapter_details->hb_qsv_info_hevc != NULL) caps = g_adapter_details->hb_qsv_info_hevc->capabilities;
             break;
 
         default:
@@ -2035,7 +2020,7 @@ void hb_qsv_video_quality_get_limits(uint32_t codec, float *low, float *high,
     {
         case HB_VCODEC_QSV_H265_10BIT:
         case HB_VCODEC_QSV_H265:
-            if (hb_qsv_info_hevc != NULL) caps = hb_qsv_info_hevc->capabilities;
+            if (g_adapter_details->hb_qsv_info_hevc != NULL) caps = g_adapter_details->hb_qsv_info_hevc->capabilities;
             *direction   = 1;
             *granularity = 1.;
             *low         = (caps & HB_QSV_CAP_RATECONTROL_ICQ) ? 1. : 0.;
@@ -2044,7 +2029,7 @@ void hb_qsv_video_quality_get_limits(uint32_t codec, float *low, float *high,
 
         case HB_VCODEC_QSV_H264:
         default:
-            if (hb_qsv_info_avc != NULL) caps = hb_qsv_info_avc->capabilities;
+            if (g_adapter_details->hb_qsv_info_avc != NULL) caps = g_adapter_details->hb_qsv_info_avc->capabilities;
             *direction   = 1;
             *granularity = 1.;
             *low         = (caps & HB_QSV_CAP_RATECONTROL_ICQ) ? 1. : 0.;
@@ -2469,39 +2454,6 @@ uint8_t hb_qsv_frametype_xlat(uint16_t qsv_frametype, uint16_t *out_flags)
     return frametype;
 }
 
-int hb_qsv_impl_set_preferred(const char *name)
-{
-    if (name == NULL)
-    {
-        return -1;
-    }
-    if (!strcasecmp(name, "software"))
-    {
-        if (qsv_software_info_avc.available)
-        {
-            hb_qsv_info_avc = &qsv_software_info_avc;
-        }
-        if (qsv_software_info_hevc.available)
-        {
-            hb_qsv_info_hevc = &qsv_software_info_hevc;
-        }
-        return 0;
-    }
-    if (!strcasecmp(name, "hardware"))
-    {
-        if (qsv_hardware_info_avc.available)
-        {
-            hb_qsv_info_avc = &qsv_hardware_info_avc;
-        }
-        if (qsv_hardware_info_hevc.available)
-        {
-            hb_qsv_info_hevc = &qsv_hardware_info_hevc;
-        }
-        return 0;
-    }
-    return -1;
-}
-
 const char* hb_qsv_impl_get_name(int impl)
 {
     switch (MFX_IMPL_BASETYPE(impl))
@@ -2546,10 +2498,10 @@ const char* hb_qsv_impl_get_via_name(int impl)
 void hb_qsv_force_workarounds()
 {
 #define FORCE_WORKAROUNDS ~(HB_QSV_CAP_OPTION2_BREFTYPE)
-    qsv_software_info_avc.capabilities  &= FORCE_WORKAROUNDS;
-    qsv_hardware_info_avc.capabilities  &= FORCE_WORKAROUNDS;
-    qsv_software_info_hevc.capabilities &= FORCE_WORKAROUNDS;
-    qsv_hardware_info_hevc.capabilities &= FORCE_WORKAROUNDS;
+    g_adapter_details->qsv_software_info_avc.capabilities  &= FORCE_WORKAROUNDS;
+    g_adapter_details->qsv_hardware_info_avc.capabilities  &= FORCE_WORKAROUNDS;
+    g_adapter_details->qsv_software_info_hevc.capabilities &= FORCE_WORKAROUNDS;
+    g_adapter_details->qsv_hardware_info_hevc.capabilities &= FORCE_WORKAROUNDS;
 #undef FORCE_WORKAROUNDS
 }
 

@@ -3086,7 +3086,7 @@ static int ParseOptions( int argc, char ** argv )
                 qsv_async_depth = atoi(optarg);
                 break;
             case QSV_IMPLEMENTATION:
-                hb_qsv_impl_set_preferred(optarg);
+                //hb_qsv_impl_set_preferred(optarg);
                 break;
 #endif
             case ':':

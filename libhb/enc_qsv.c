@@ -998,35 +998,6 @@ int qsv_enc_init(hb_work_private_t *pv)
     return 0;
 }
 
-static mfxIMPL hb_qsv_dx_index_to_impl(int dx_index)
-{
-    mfxIMPL impl;
-
-    switch (dx_index)
-    {
-        {
-        case 0:
-            impl = MFX_IMPL_HARDWARE;
-            break;
-        case 1:
-            impl = MFX_IMPL_HARDWARE2;
-            break;
-        case 2:
-            impl = MFX_IMPL_HARDWARE3;
-            break;
-        case 3:
-            impl = MFX_IMPL_HARDWARE4;
-            break;
-
-        default:
-            // try searching on all display adapters
-            impl = MFX_IMPL_HARDWARE_ANY;
-            break;
-        }
-    }
-    return impl;
-}
-
 /***********************************************************************
  * encqsvInit
  ***********************************************************************

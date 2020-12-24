@@ -17,7 +17,7 @@ int            hb_qsv_available();
 #if HB_PROJECT_FEATURE_QSV
 
 // Public API
-int  hb_qsv_impl_set_preferred(const char *name);
+//int  hb_qsv_impl_set_preferred(const char *name);
 void hb_qsv_force_workarounds(); // for developers only
 
 #ifdef __LIBHB__
@@ -245,6 +245,7 @@ enum AVPixelFormat hb_qsv_get_format(AVCodecContext *s, const enum AVPixelFormat
 int hb_qsv_preset_is_zero_copy_enabled(const hb_dict_t *job_dict);
 void hb_qsv_uninit_dec(AVCodecContext *s);
 void hb_qsv_uninit_enc(hb_job_t *job);
+mfxIMPL hb_qsv_dx_index_to_impl(int dx_index);
 
 #endif // __LIBHB__
 #endif // HB_PROJECT_FEATURE_QSV
