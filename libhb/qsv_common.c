@@ -196,6 +196,7 @@ int hb_qsv_available()
 
 int hb_qsv_video_encoder_is_enabled(int encoder)
 {
+    hb_log("hb_qsv_video_encoder_is_enabled");
     switch (encoder)
     {
         case HB_VCODEC_QSV_H264:
@@ -1209,6 +1210,7 @@ int hb_qsv_full_path_is_enabled(hb_job_t *job)
 
 int hb_qsv_copyframe_is_slow(int encoder)
 {
+    hb_log("hb_qsv_copyframe_is_slow");
     hb_qsv_info_t *info = hb_qsv_info_get(encoder);
     if (info != NULL && qsv_implementation_is_hardware(info->implementation))
     {
@@ -1330,6 +1332,7 @@ int hb_qsv_param_parse_dx_index(hb_job_t *job, const int dx_index)
     for (int i = 0; i < qsv_adapters_info.NumActual; i++)
     {
         mfxAdapterInfo* info = &qsv_adapters_info.Adapters[i];
+        hb_qsv_adapter_details_t *details = hb_list_item(qsv_adapters_details_list, i);
         // find DirectX adapter with given index in list of QSV adapters
         // if -1 use first adapter with highest priority
         if (info && ((info->Number == dx_index) || (dx_index == -1)))
@@ -1345,6 +1348,7 @@ int hb_qsv_param_parse_dx_index(hb_job_t *job, const int dx_index)
             hb_log("qsv: %s qsv adapter with index %s has been selected",
                 (info->Platform.MediaAdapterType == MFX_MEDIA_INTEGRATED) ? "integrated" :
                 (info->Platform.MediaAdapterType == MFX_MEDIA_DISCRETE) ? "discrete" : "unknown", job->qsv.ctx->qsv_device);
+            g_adapter_details = details;
             return 0;
         }
     }
@@ -1994,6 +1998,7 @@ const char* const* hb_qsv_level_get_names(int encoder)
 
 const char* hb_qsv_video_quality_get_name(uint32_t codec)
 {
+    hb_log("hb_qsv_video_quality_get_name");
     uint64_t caps = 0;
     switch (codec)
     {
@@ -2016,6 +2021,7 @@ void hb_qsv_video_quality_get_limits(uint32_t codec, float *low, float *high,
                                      float *granularity, int *direction)
 {
     uint64_t caps = 0;
+    hb_log("hb_qsv_video_quality_get_limits");
     switch (codec)
     {
         case HB_VCODEC_QSV_H265_10BIT:
@@ -2497,6 +2503,7 @@ const char* hb_qsv_impl_get_via_name(int impl)
 
 void hb_qsv_force_workarounds()
 {
+    hb_log("hb_qsv_force_workarounds");
 #define FORCE_WORKAROUNDS ~(HB_QSV_CAP_OPTION2_BREFTYPE)
     g_adapter_details->qsv_software_info_avc.capabilities  &= FORCE_WORKAROUNDS;
     g_adapter_details->qsv_hardware_info_avc.capabilities  &= FORCE_WORKAROUNDS;
