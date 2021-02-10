@@ -209,6 +209,7 @@ void hb_qsv_add_context_usage(hb_qsv_context * qsv, int is_threaded)
 
 int hb_qsv_context_clean(hb_qsv_context * qsv, int full_job)
 {
+    hb_log("hb_qsv_context_clean");
     int is_active = 0;
     mfxStatus sts = MFX_ERR_NONE;
     int mut_ret = 0;
@@ -218,29 +219,38 @@ int hb_qsv_context_clean(hb_qsv_context * qsv, int full_job)
     // spaces would have to be cleaned on the own,
     // here we care about the rest, common stuff
     if (is_active == 0) {
-
+        hb_log("hb_qsv_context_clean is_active");
         if (qsv->dts_seq) {
+            hb_log("hb_qsv_context_clean dts_seq");
             while (hb_qsv_list_count(qsv->dts_seq))
                 hb_qsv_dts_pop(qsv);
 
             hb_qsv_list_close(&qsv->dts_seq);
+            hb_log("hb_qsv_context_clean hb_qsv_list_close");
         }
         if (qsv->qts_seq_mutex) {
+            hb_log("hb_qsv_context_clean qts_seq_mutex");
             mut_ret = pthread_mutex_destroy(qsv->qts_seq_mutex);
             if(mut_ret)
                 hb_log("QSV: pthread_mutex_destroy issue[%d] at %s", mut_ret, __FUNCTION__);
             qsv->qts_seq_mutex = 0;
+            hb_log("hb_qsv_context_clean qts_seq_mutex end");
         }
 
         if (qsv->pipes)
             hb_qsv_pipe_list_clean(&qsv->pipes);
 
         if (qsv->mfx_session && !full_job) {
+            hb_log("hb_qsv_context_clean mfx_session=%p", qsv->mfx_session);
+            // MFXClose() fails in the media_driver under Linux when encoding interrupted
+#if defined(_WIN32) || defined(__MINGW32__)
             sts = MFXClose(qsv->mfx_session);
             HB_QSV_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+#endif
             qsv->mfx_session = 0;
         }
     }
+    hb_log("hb_qsv_context_clean end");
     return 0;
 }
 

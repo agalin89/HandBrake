@@ -488,6 +488,7 @@ static int hb_qsv_filter_pre_work( hb_filter_object_t * filter,
     return HB_FILTER_OK;
 }
 static void hb_qsv_filter_pre_close( hb_filter_object_t * filter ){
+    hb_log( "hb_qsv_filter_pre_close" );
     int i = 0;
     mfxStatus sts = MFX_ERR_NONE;
 

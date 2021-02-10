@@ -253,6 +253,7 @@ int hb_get_cpu_count()
 
 int hb_get_cpu_platform()
 {
+    hb_log("hb_get_cpu_platform");
     return hb_cpu_info.platform;
 }
 

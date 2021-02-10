@@ -751,6 +751,7 @@ int qsv_enc_init(hb_work_private_t *pv)
         // if only for encode
         if (pv->is_sys_mem)
         {
+            hb_log("qsv_enc_init: pv->mfx_session=%p", pv->mfx_session);
             // re-use the session from encqsvInit
             qsv->mfx_session = pv->mfx_session;
         }
@@ -892,7 +893,7 @@ int qsv_enc_init(hb_work_private_t *pv)
             *job->die = 1;
             return -1;
         }
-        pv->loaded_plugins = hb_qsv_load_plugins(pv->qsv_info, qsv->mfx_session, version);
+        pv->loaded_plugins = hb_qsv_load_plugins(hb_qsv_get_adapter_index(), pv->qsv_info, qsv->mfx_session, version);
         if (pv->loaded_plugins == NULL)
         {
             hb_error("qsv_enc_init: hb_qsv_load_plugins failed");
@@ -998,35 +999,6 @@ int qsv_enc_init(hb_work_private_t *pv)
     return 0;
 }
 
-static mfxIMPL hb_qsv_dx_index_to_impl(int dx_index)
-{
-    mfxIMPL impl;
-
-    switch (dx_index)
-    {
-        {
-        case 0:
-            impl = MFX_IMPL_HARDWARE;
-            break;
-        case 1:
-            impl = MFX_IMPL_HARDWARE2;
-            break;
-        case 2:
-            impl = MFX_IMPL_HARDWARE3;
-            break;
-        case 3:
-            impl = MFX_IMPL_HARDWARE4;
-            break;
-
-        default:
-            // try searching on all display adapters
-            impl = MFX_IMPL_HARDWARE_ANY;
-            break;
-        }
-    }
-    return impl;
-}
-
 /***********************************************************************
  * encqsvInit
  ***********************************************************************
@@ -1034,12 +1006,13 @@ static mfxIMPL hb_qsv_dx_index_to_impl(int dx_index)
  **********************************************************************/
 int encqsvInit(hb_work_object_t *w, hb_job_t *job)
 {
+    hb_log("encqsvInit");
     hb_work_private_t *pv = calloc(1, sizeof(hb_work_private_t));
     w->private_data       = pv;
 
     pv->is_sys_mem         = hb_qsv_full_path_is_enabled(job) ? 0 : 1; // TODO: re-implement QSV VPP filtering support
     pv->job                = job;
-    pv->qsv_info           = hb_qsv_info_get(job->vcodec);
+    pv->qsv_info           = hb_qsv_info_get(hb_qsv_get_adapter_index(), job->vcodec);
     pv->delayed_processing = hb_list_init();
     pv->last_start         = INT64_MIN;
     hb_buffer_list_clear(&pv->encoded_frames);
@@ -1104,12 +1077,14 @@ int encqsvInit(hb_work_object_t *w, hb_job_t *job)
         }
         hb_dict_free(&options_list);
     }
-#if !defined(SYS_LINUX) && !defined(SYS_FREEBSD)
+#if defined(_WIN32) || defined(__MINGW32__)
+    hb_log("encqsvInit: SYS_LINUX");
     if (pv->is_sys_mem)
     {
+        hb_log("encqsvInit: is_sys_mem");
         // select the right hardware implementation based on dx index
         if (!job->qsv.ctx->qsv_device)
-            hb_qsv_param_parse_dx_index(pv->job, -1);
+            hb_qsv_param_parse_dx_index(pv->job, hb_qsv_get_adapter_index());
         mfxIMPL hw_preference = MFX_IMPL_VIA_D3D11;
         pv->qsv_info->implementation = hb_qsv_dx_index_to_impl(job->qsv.ctx->dx_index) | hw_preference;
     }
@@ -1465,7 +1440,7 @@ int encqsvInit(hb_work_object_t *w, hb_job_t *job)
     }
 
     /* Load required MFX plug-ins */
-    pv->loaded_plugins = hb_qsv_load_plugins(pv->qsv_info, session, version);
+    pv->loaded_plugins = hb_qsv_load_plugins(hb_qsv_get_adapter_index(), pv->qsv_info, session, version);
     if (pv->loaded_plugins == NULL)
     {
         hb_error("encqsvInit: hb_qsv_load_plugins failed");
@@ -1574,10 +1549,12 @@ int encqsvInit(hb_work_object_t *w, hb_job_t *job)
     // when using system memory, we re-use this same session
     if (pv->is_sys_mem)
     {
+        hb_log("encqsvInit: pv->mfx_session = session=%p", session);
         pv->mfx_session = session;
     }
     else
     {
+        hb_log("encqsvInit: MFXClose session=%p", session);
         hb_qsv_unload_plugins(&pv->loaded_plugins, session, version);
         MFXClose(session);
     }
@@ -1774,12 +1751,13 @@ int encqsvInit(hb_work_object_t *w, hb_job_t *job)
     // fall back to default if zero
     pv->max_async_depth = videoParam.AsyncDepth ? videoParam.AsyncDepth : HB_QSV_ASYNC_DEPTH_DEFAULT;
     pv->async_depth     = 0;
-
+    hb_log("encqsvInit end");
     return 0;
 }
 
 void encqsvClose(hb_work_object_t *w)
 {
+    hb_log("encqsvClose");
     hb_work_private_t *pv = w->private_data;
     mfxVersion version;
     int i;
@@ -1798,11 +1776,11 @@ void encqsvClose(hb_work_object_t *w)
             {
                 hb_qsv_unload_plugins(&pv->loaded_plugins, qsv_ctx->mfx_session, version);
             }
-
+            hb_log("hb_display_close");
             hb_qsv_uninit_enc(pv->job);
 
             hb_display_close(&pv->display);
-
+            hb_log("hb_display_close end");
             if (qsv_enc_space != NULL)
             {
                 if (qsv_enc_space->is_init_done)
@@ -1873,6 +1851,7 @@ void encqsvClose(hb_work_object_t *w)
 
     free(pv);
     w->private_data = NULL;
+    hb_log("encqsvClose end");
 }
 
 static void compute_init_delay(hb_work_private_t *pv, mfxBitstream *bs)

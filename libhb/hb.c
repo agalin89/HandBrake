@@ -1813,6 +1813,7 @@ int hb_global_init_no_hardware()
 
 int hb_global_init()
 {
+    hb_log("hb_global_init");
     /* Print hardening status on global init */
 #if HB_PROJECT_SECURITY_HARDEN
     hb_log( "Compile-time hardening features are enabled" );
@@ -1830,10 +1831,9 @@ int hb_global_init()
 #if HB_PROJECT_FEATURE_QSV
     if (!disable_hardware)
     {
-        result = hb_qsv_info_init();
-        if (result < 0)
+        if (hb_qsv_available() < 0)
         {
-            hb_error("hb_qsv_info_init failed!");
+            hb_error("hb_qsv_available failed!");
             return -1;
         }
         hb_param_configure_qsv();
@@ -1885,7 +1885,7 @@ int hb_global_init()
 
     // Initialize the builtin presets hb_dict_t
     hb_presets_builtin_init();
-
+    hb_log("hb_global_init end");
     return result;
 }
 

@@ -283,13 +283,14 @@ hb_encoder_internal_t hb_video_encoders[]  =
 int hb_video_encoders_count = sizeof(hb_video_encoders) / sizeof(hb_video_encoders[0]);
 static int hb_video_encoder_is_enabled(int encoder, int disable_hardware)
 {
+    hb_log("hb_video_encoder_is_enabled");
     // Hardware Encoders
     if (!disable_hardware)
     {
 #if HB_PROJECT_FEATURE_QSV
         if (encoder & HB_VCODEC_QSV_MASK)
         {
-            return hb_qsv_video_encoder_is_enabled(encoder);
+            return hb_qsv_video_encoder_is_enabled(hb_qsv_get_adapter_index(), encoder);
         }
 #endif
 
@@ -482,6 +483,7 @@ static int hb_container_is_enabled(int format)
 
 void hb_common_global_init(int disable_hardware)
 {
+    hb_log("hb_common_global_init");
     static int common_init_done = 0;
     if (common_init_done)
         return;
@@ -3798,6 +3800,7 @@ void hb_title_close( hb_title_t ** _t )
 
 static void job_setup(hb_job_t * job, hb_title_t * title)
 {
+    hb_log("job_setup");
     if ( job == NULL || title == NULL )
         return;
 
@@ -3857,11 +3860,13 @@ static void job_setup(hb_job_t * job, hb_title_t * title)
     job->metadata = hb_metadata_copy( title->metadata );
 
 #if HB_PROJECT_FEATURE_QSV
+    job->qsv.ctx                   = hb_qsv_context_init();
     job->qsv.enc_info.is_init_done = 0;
     job->qsv.async_depth           = hb_qsv_param_default_async_depth();
     job->qsv.decode                = !!(title->video_decode_support &
                                         HB_DECODE_SUPPORT_QSV);
 #endif
+    hb_log("job_setup end");
 }
 
 int hb_output_color_prim(hb_job_t * job)
@@ -4040,6 +4045,7 @@ void hb_job_set_encoder_tune(hb_job_t *job, const char *tune)
 
 void hb_job_set_encoder_options(hb_job_t *job, const char *options)
 {
+    hb_log("hb_job_set_encoder_options");
     if (job != NULL)
     {
         if (options == NULL || options[0] == 0)
