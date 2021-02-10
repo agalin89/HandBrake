@@ -13,6 +13,10 @@
 #include "handbrake/plist.h"
 #include "handbrake/lang.h"
 
+#if HB_PROJECT_FEATURE_QSV
+#include "handbrake/qsv_common.h"
+#endif
+
 #if defined(SYS_LINUX)
 #define HB_PRESET_PLIST_FILE    "ghb/presets"
 #define HB_PRESET_JSON_FILE     "ghb/presets.json"
@@ -164,6 +168,47 @@ static int do_preset_search(hb_value_t *preset, preset_do_context_t *do_ctx)
     }
 
     return result;
+}
+
+static int preset_hw_scrub(hb_value_t *preset)
+{
+    int disabled = 0;
+    hb_value_t *val = hb_dict_get(preset, "VideoEncoder");
+    if (val != NULL)
+    {
+        const char *s;
+        int vcodec;
+        s = hb_value_get_string(val);
+        vcodec = hb_video_encoder_get_from_name(s);
+        if (vcodec != HB_VCODEC_INVALID)
+        {
+            if (vcodec & HB_VCODEC_QSV_MASK)
+            {
+                disabled = 1;
+#if HB_PROJECT_FEATURE_QSV
+                if(hb_qsv_available())
+                {
+                    // check the qsv codec is supported by hw
+                    disabled = hb_qsv_video_encoder_is_enabled(hb_qsv_get_adapter_index(), vcodec) ? 0 : 1;
+                }
+#endif
+            }
+            // TODO: other hw codecs for non Intel platforms
+        }
+    }
+
+    if(disabled)
+    {
+        hb_dict_set_int(preset, "PresetDisabled", disabled);
+    }
+    return 0;
+}
+
+static int do_preset_hw_scrub(hb_value_t *preset, preset_do_context_t *do_ctx)
+{
+    preset_search_context_t *ctx = (preset_search_context_t*)do_ctx;
+    preset_hw_scrub(preset);
+    return PRESET_DO_NEXT;
 }
 
 static int do_preset_import(hb_value_t *preset, preset_do_context_t *do_ctx)
@@ -1820,7 +1865,11 @@ int hb_preset_apply_video(const hb_dict_t *preset, hb_dict_t *job_dict)
         hb_dict_set(qsv, "AsyncDepth",
                     hb_value_xform(value, HB_VALUE_TYPE_INT));
     }
-
+    if ((value = hb_dict_get(preset, "VideoQSVAdapterIndex")) != NULL)
+    {
+        hb_dict_set(qsv, "AdapterIndex",
+                    hb_value_xform(value, HB_VALUE_TYPE_INT));
+    }
     return 0;
 }
 

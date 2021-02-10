@@ -218,7 +218,6 @@ int hb_qsv_context_clean(hb_qsv_context * qsv, int full_job)
     // spaces would have to be cleaned on the own,
     // here we care about the rest, common stuff
     if (is_active == 0) {
-
         if (qsv->dts_seq) {
             while (hb_qsv_list_count(qsv->dts_seq))
                 hb_qsv_dts_pop(qsv);
@@ -236,8 +235,11 @@ int hb_qsv_context_clean(hb_qsv_context * qsv, int full_job)
             hb_qsv_pipe_list_clean(&qsv->pipes);
 
         if (qsv->mfx_session && !full_job) {
+            // MFXClose() fails in the media_driver under Linux when encoding interrupted
+#if defined(_WIN32) || defined(__MINGW32__)
             sts = MFXClose(qsv->mfx_session);
             HB_QSV_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+#endif
             qsv->mfx_session = 0;
         }
     }
