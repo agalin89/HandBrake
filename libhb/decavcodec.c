@@ -1402,7 +1402,7 @@ static int decodeFrame( hb_work_private_t * pv, packet_info_t * packet_info )
 
 static int decavcodecvInit( hb_work_object_t * w, hb_job_t * job )
 {
-
+    hb_log("decavcodecvInit");
     hb_work_private_t *pv = calloc( 1, sizeof( hb_work_private_t ) );
 
     w->private_data = pv;
@@ -1423,7 +1423,7 @@ static int decavcodecvInit( hb_work_object_t * w, hb_job_t * job )
         pv->qsv.config.io_pattern = MFX_IOPATTERN_OUT_SYSTEM_MEMORY;
         if(hb_qsv_full_path_is_enabled(job))
         {
-            hb_qsv_info_t *info = hb_qsv_info_get(job->vcodec);
+            hb_qsv_info_t *info = hb_qsv_info_get(hb_qsv_get_adapter_index(), job->vcodec);
             if (info != NULL)
             {
                 // setup the QSV configuration
@@ -1443,6 +1443,7 @@ static int decavcodecvInit( hb_work_object_t * w, hb_job_t * job )
                     hb_error( "decavcodecvInit: no context" );
                     return 1;
                 }
+                pv->job->qsv.ctx->full_path_is_enabled = 1;
                 if (!pv->job->qsv.ctx->hb_dec_qsv_frames_ctx)
                 {
                     pv->job->qsv.ctx->hb_dec_qsv_frames_ctx = av_mallocz(sizeof(HBQSVFramesContext));
@@ -1573,6 +1574,7 @@ static int decavcodecvInit( hb_work_object_t * w, hb_job_t * job )
             }
         }
     }
+    hb_log("decavcodecvInit end");
     return 0;
 }
 
@@ -2077,6 +2079,7 @@ static int get_color_matrix(int colorspace, hb_geometry_t geometry)
 
 static int decavcodecvInfo( hb_work_object_t *w, hb_work_info_t *info )
 {
+    hb_log("decavcodecvInfo");
     hb_work_private_t *pv = w->private_data;
 
     int clock_min, clock_max, clock;
@@ -2141,15 +2144,17 @@ static int decavcodecvInfo( hb_work_object_t *w, hb_work_info_t *info )
                     pv->context->pix_fmt == AV_PIX_FMT_YUVJ420P ||
                     pv->context->pix_fmt == AV_PIX_FMT_YUV420P10LE)
                 {
+                    hb_log("info->video_decode_support |= HB_DECODE_SUPPORT_QSV");
                     info->video_decode_support |= HB_DECODE_SUPPORT_QSV;
                 }
                 break;
             case AV_CODEC_ID_AV1:
-                if ((qsv_hardware_generation(hb_get_cpu_platform()) >= QSV_G8) &&
+                if (hb_qsv_decode_av1_is_supported(hb_qsv_get_adapter_index()) &&
                     (pv->context->pix_fmt == AV_PIX_FMT_YUV420P  ||
                     pv->context->pix_fmt == AV_PIX_FMT_YUVJ420P ||
                     pv->context->pix_fmt == AV_PIX_FMT_YUV420P10LE))
                 {
+                    hb_log("qsv: AV1 decoder hardware acceleration is supported on %d adapter", hb_qsv_get_adapter_index());
                     info->video_decode_support |= HB_DECODE_SUPPORT_QSV;
                 }
                 break;
@@ -2158,7 +2163,7 @@ static int decavcodecvInfo( hb_work_object_t *w, hb_work_info_t *info )
         }
     }
 #endif
-
+    hb_log("decavcodecvInfo end");
     return 1;
 }
 

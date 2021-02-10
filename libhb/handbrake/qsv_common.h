@@ -17,7 +17,7 @@ int            hb_qsv_available();
 #if HB_PROJECT_FEATURE_QSV
 
 // Public API
-int  hb_qsv_impl_set_preferred(const char *name);
+//int  hb_qsv_impl_set_preferred(const char *name);
 void hb_qsv_force_workarounds(); // for developers only
 
 #ifdef __LIBHB__
@@ -44,7 +44,7 @@ void hb_qsv_force_workarounds(); // for developers only
 typedef struct hb_qsv_info_s
 {
     // each info struct only corresponds to one CodecId and implementation combo
-    const mfxU32  codec_id;
+    mfxU32  codec_id;
     mfxIMPL implementation;
 
     // whether the encoder is available for this implementation
@@ -82,16 +82,16 @@ typedef struct hb_qsv_info_s
 
 /* Intel Quick Sync Video utilities */
 hb_display_t * hb_qsv_display_init(void);
-int            hb_qsv_video_encoder_is_enabled(int encoder);
+int            hb_qsv_video_encoder_is_enabled(int adapter_index, int encoder);
 int            hb_qsv_audio_encoder_is_enabled(int encoder);
 int            hb_qsv_info_init();
 void           hb_qsv_info_print();
 hb_list_t*     hb_qsv_adapters_list();
-hb_qsv_info_t* hb_qsv_info_get(int encoder);
+hb_qsv_info_t* hb_qsv_info_get(int adapter_index, int encoder);
 int qsv_hardware_generation(int cpu_platform);
 
 /* Automatically load and unload any required MFX plug-ins */
-hb_list_t* hb_qsv_load_plugins  (hb_qsv_info_t *info, mfxSession session, mfxVersion version);
+hb_list_t* hb_qsv_load_plugins  (int adapter_index, hb_qsv_info_t *info, mfxSession session, mfxVersion version);
 void       hb_qsv_unload_plugins(hb_list_t     **_l,  mfxSession session, mfxVersion version);
 
 /* Intel Quick Sync Video DECODE utilities */
@@ -247,6 +247,11 @@ enum AVPixelFormat hb_qsv_get_format(AVCodecContext *s, const enum AVPixelFormat
 int hb_qsv_preset_is_zero_copy_enabled(const hb_dict_t *job_dict);
 void hb_qsv_uninit_dec(AVCodecContext *s);
 void hb_qsv_uninit_enc(hb_job_t *job);
+mfxIMPL hb_qsv_dx_index_to_impl(int dx_index);
+int hb_qsv_parse_adapter_index(hb_job_t *job);
+int hb_qsv_decode_av1_is_supported(int adapter_index);
+int hb_qsv_set_adapter_index(int adapter_index);
+int hb_qsv_get_adapter_index();
 
 #endif // __LIBHB__
 #endif // HB_PROJECT_FEATURE_QSV
