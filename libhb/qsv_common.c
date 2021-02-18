@@ -54,7 +54,7 @@ typedef struct hb_qsv_adapter_details
 static mfxAdaptersInfo g_qsv_adapters_info;
 static const char* hb_qsv_get_adapter_type(const mfxAdapterInfo* info);
 #endif
-int hb_get_qsv_platform(int adapter_index);
+int hb_qsv_get_platform(int adapter_index);
 static hb_list_t *g_qsv_adapters_list         = NULL;
 static hb_list_t *g_qsv_adapters_details_list = NULL;
 static int g_adapter_index = -1;
@@ -170,6 +170,11 @@ int hb_qsv_get_adapter_index()
     return g_adapter_index;
 }
 
+hb_list_t* hb_qsv_adapters_list()
+{
+    return g_qsv_adapters_list;
+}
+
 static hb_qsv_adapter_details_t* hb_qsv_get_adapters_details_by_index(int adapter_index)
 {
     hb_log("hb_qsv_get_adapters_details_by_index: %d", adapter_index);
@@ -186,9 +191,9 @@ static hb_qsv_adapter_details_t* hb_qsv_get_adapters_details_by_index(int adapte
     return NULL;
 }
 
-int qsv_hardware_generation(int cpu_platform)
+int hb_qsv_hardware_generation(int cpu_platform)
 {
-    hb_log("qsv_hardware_generation");
+    hb_log("hb_qsv_hardware_generation");
     switch (cpu_platform)
     {
         case HB_CPU_PLATFORM_INTEL_BNL:
@@ -270,7 +275,7 @@ int hb_qsv_video_encoder_is_enabled(int adapter_index, int encoder)
             case HB_VCODEC_QSV_H264:
                 return details->hb_qsv_info_avc != NULL && details->hb_qsv_info_avc->available;
             case HB_VCODEC_QSV_H265_10BIT:
-                if (qsv_hardware_generation(hb_get_qsv_platform(adapter_index)) < QSV_G6)
+                if (hb_qsv_hardware_generation(hb_qsv_get_platform(adapter_index)) < QSV_G6)
                     return 0;
             case HB_VCODEC_QSV_H265:
                 return details->hb_qsv_info_hevc != NULL && details->hb_qsv_info_hevc->available;
@@ -481,13 +486,13 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
         {
             if (qsv_implementation_is_hardware(info->implementation))
             {
-                if (qsv_hardware_generation(hb_get_qsv_platform(index)) >= QSV_G3)
+                if (hb_qsv_hardware_generation(hb_qsv_get_platform(index)) >= QSV_G3)
                 {
                     info->capabilities |= HB_QSV_CAP_B_REF_PYRAMID;
                 }
                 hb_log("HB_QSV_CAP_LOWPOWER_ENCODE before");
                 if (info->codec_id == MFX_CODEC_HEVC &&
-                    (qsv_hardware_generation(hb_get_qsv_platform(index)) >= QSV_G7))
+                    (hb_qsv_hardware_generation(hb_qsv_get_platform(index)) >= QSV_G7))
                 {
                     hb_log("HB_QSV_CAP_LOWPOWER_ENCODE");
                     info->capabilities |= HB_QSV_CAP_LOWPOWER_ENCODE;
@@ -676,7 +681,7 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
                  * - ExtBRC requires G2 hardware (Ivy Bridge or equivalent)
                  */
                 if (qsv_implementation_is_hardware(info->implementation) &&
-                    qsv_hardware_generation(hb_get_qsv_platform(index)) >= QSV_G3)
+                    hb_qsv_hardware_generation(hb_qsv_get_platform(index)) >= QSV_G3)
                 {
                     if (extCodingOption2.MBBRC)
                     {
@@ -684,7 +689,7 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
                     }
                 }
                 if (qsv_implementation_is_hardware(info->implementation) &&
-                    qsv_hardware_generation(hb_get_qsv_platform(index)) >= QSV_G2)
+                    hb_qsv_hardware_generation(hb_qsv_get_platform(index)) >= QSV_G2)
                 {
                     if (extCodingOption2.ExtBRC)
                     {
@@ -700,7 +705,7 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
                 if (HB_CHECK_MFX_VERSION(version, 1, 7))
                 {
                     if (qsv_implementation_is_hardware(info->implementation) &&
-                        qsv_hardware_generation(hb_get_qsv_platform(index)) >= QSV_G3)
+                        hb_qsv_hardware_generation(hb_qsv_get_platform(index)) >= QSV_G3)
                     {
                         if (extCodingOption2.Trellis)
                         {
@@ -751,14 +756,14 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
         }
         if (HB_CHECK_MFX_VERSION(version, 1, 19))
         {
-            if (qsv_hardware_generation(hb_get_qsv_platform(index)) >= QSV_G7)
+            if (hb_qsv_hardware_generation(hb_qsv_get_platform(index)) >= QSV_G7)
             {
                 info->capabilities |= HB_QSV_CAP_VPP_SCALING;
             }
         }
         if (HB_CHECK_MFX_VERSION(version, 1, 33))
         {
-            if (qsv_hardware_generation(hb_get_qsv_platform(index)) >= QSV_G7)
+            if (hb_qsv_hardware_generation(hb_qsv_get_platform(index)) >= QSV_G7)
             {
                 info->capabilities |= HB_QSV_CAP_VPP_INTERPOLATION;
             }
@@ -905,7 +910,7 @@ static int hb_qsv_collect_adapters_details(hb_list_t *qsv_adapters_list, hb_list
                 //
                 // Note: this-party hardware (QSV_G0) is unsupported for the time being
                 MFXQueryVersion(session, &details->qsv_hardware_version);
-                if (qsv_hardware_generation(hb_get_qsv_platform(*dx_index)) >= QSV_G1 &&
+                if (hb_qsv_hardware_generation(hb_qsv_get_platform(*dx_index)) >= QSV_G1 &&
                     HB_CHECK_MFX_VERSION(details->qsv_hardware_version,
                                         HB_QSV_MINVERSION_MAJOR,
                                         HB_QSV_MINVERSION_MINOR))
@@ -1068,7 +1073,7 @@ static void hb_qsv_adapter_info_print(hb_qsv_adapter_details_t *adapter_details)
         }
         if (adapter_details->hb_qsv_info_hevc != NULL && adapter_details->hb_qsv_info_hevc->available)
         {
-            hb_log(" - H.265 encoder: yes (8bit: yes, 10bit: %s)", (qsv_hardware_generation(hb_get_qsv_platform(adapter_details->index)) < QSV_G6) ? "no" : "yes" );
+            hb_log(" - H.265 encoder: yes (8bit: yes, 10bit: %s)", (hb_qsv_hardware_generation(hb_qsv_get_platform(adapter_details->index)) < QSV_G6) ? "no" : "yes" );
             hb_log("    - preferred implementation: %s %s",
                    hb_qsv_impl_get_name(adapter_details->hb_qsv_info_hevc->implementation),
                    hb_qsv_impl_get_via_name(adapter_details->hb_qsv_info_hevc->implementation));
@@ -1166,7 +1171,7 @@ hb_list_t* hb_qsv_load_plugins(int index, hb_qsv_info_t *info, mfxSession sessio
 
     if (HB_CHECK_MFX_VERSION(version, 1, 8))
     {
-        if (info->codec_id == MFX_CODEC_HEVC && !(qsv_hardware_generation(hb_get_qsv_platform(index)) < QSV_G5))
+        if (info->codec_id == MFX_CODEC_HEVC && !(hb_qsv_hardware_generation(hb_qsv_get_platform(index)) < QSV_G5))
         {
             if (HB_CHECK_MFX_VERSION(version, 1, 15) &&
                 qsv_implementation_is_hardware(info->implementation))
@@ -1235,7 +1240,7 @@ const char* hb_qsv_decode_get_codec_name(enum AVCodecID codec_id)
 
 int hb_qsv_decode_av1_is_supported(int adapter_index)
 {
-    return qsv_hardware_generation(hb_get_qsv_platform(adapter_index)) >= QSV_G8;
+    return hb_qsv_hardware_generation(hb_qsv_get_platform(adapter_index)) >= QSV_G8;
 }
 
 int hb_qsv_decode_is_enabled(hb_job_t *job)
@@ -1243,8 +1248,8 @@ int hb_qsv_decode_is_enabled(hb_job_t *job)
     hb_log("hb_qsv_decode_is_enabled");
     return ((job != NULL && job->qsv.decode) &&
             (job->title->video_decode_support & HB_DECODE_SUPPORT_QSV)) &&
-            (job->vcodec == HB_VCODEC_QSV_H265 ? (qsv_hardware_generation(hb_get_qsv_platform(hb_qsv_get_adapter_index())) >= QSV_G5) : 1) &&
-            (job->vcodec == HB_VCODEC_QSV_H265_10BIT ? (qsv_hardware_generation(hb_get_qsv_platform(hb_qsv_get_adapter_index())) >= QSV_G6) : 1);
+            (job->vcodec == HB_VCODEC_QSV_H265 ? (hb_qsv_hardware_generation(hb_qsv_get_platform(hb_qsv_get_adapter_index())) >= QSV_G5) : 1) &&
+            (job->vcodec == HB_VCODEC_QSV_H265_10BIT ? (hb_qsv_hardware_generation(hb_qsv_get_platform(hb_qsv_get_adapter_index())) >= QSV_G6) : 1);
     hb_log("hb_qsv_decode_is_enabled end");
 }
 
@@ -1974,7 +1979,7 @@ int hb_qsv_profile_parse(hb_qsv_param_t *param, hb_qsv_info_t *info, const char 
 
                 /* HEVC10 supported starting from KBL/G6 */
                 if (profile->value == MFX_PROFILE_HEVC_MAIN10 &&
-                    qsv_hardware_generation(hb_get_qsv_platform(hb_qsv_get_adapter_index())) < QSV_G6)
+                    hb_qsv_hardware_generation(hb_qsv_get_platform(hb_qsv_get_adapter_index())) < QSV_G6)
                 {
                     hb_log("qsv: HEVC Main10 is not supported on this platform");
                     profile = NULL;
@@ -1995,7 +2000,7 @@ int hb_qsv_profile_parse(hb_qsv_param_t *param, hb_qsv_info_t *info, const char 
     else if (((profile_key != NULL && !strcasecmp(profile_key, "auto")) || profile_key == NULL) &&
               codec == HB_VCODEC_QSV_H265_10BIT &&
               param->videoParam->mfx.CodecId == MFX_CODEC_HEVC &&
-              qsv_hardware_generation(hb_get_qsv_platform(hb_qsv_get_adapter_index())) >= QSV_G6)
+              hb_qsv_hardware_generation(hb_qsv_get_platform(hb_qsv_get_adapter_index())) >= QSV_G6)
     {
          profile = &hb_qsv_h265_profiles[1];
          param->videoParam->mfx.CodecProfile = profile->value;
@@ -2047,7 +2052,7 @@ int hb_qsv_level_parse(hb_qsv_param_t *param, hb_qsv_info_t *info, const char *l
 
 const char* const* hb_qsv_preset_get_names()
 {
-    if (qsv_hardware_generation(hb_get_qsv_platform(hb_qsv_get_adapter_index())) >= QSV_G3)
+    if (hb_qsv_hardware_generation(hb_qsv_get_platform(hb_qsv_get_adapter_index())) >= QSV_G3)
     {
         return hb_qsv_preset_names2;
     }
@@ -2190,7 +2195,7 @@ int hb_qsv_param_default_preset(hb_qsv_param_t *param,
              *     LookAhead:       0 (off)
              *     LookAheadDepth: Not Applicable
              */
-            if (qsv_hardware_generation(hb_get_qsv_platform(hb_qsv_get_adapter_index())) >= QSV_G3)
+            if (hb_qsv_hardware_generation(hb_qsv_get_platform(hb_qsv_get_adapter_index())) >= QSV_G3)
             {
                 param->rc.lookahead                = 0;
                 param->videoParam->mfx.NumRefFrame = 1;
@@ -2215,14 +2220,14 @@ int hb_qsv_param_default_preset(hb_qsv_param_t *param,
         }
         else if (!strcasecmp(preset, "speed"))
         {
-            if (qsv_hardware_generation(hb_get_qsv_platform(hb_qsv_get_adapter_index())) >= QSV_G7)
+            if (hb_qsv_hardware_generation(hb_qsv_get_platform(hb_qsv_get_adapter_index())) >= QSV_G7)
             {
                 // Since IceLake only
                 param->rc.lookahead                = 0;
                 param->videoParam->mfx.NumRefFrame = 1;
                 param->videoParam->mfx.TargetUsage = MFX_TARGETUSAGE_7;
             }
-            else if (qsv_hardware_generation(hb_get_qsv_platform(hb_qsv_get_adapter_index())) >= QSV_G3)
+            else if (hb_qsv_hardware_generation(hb_qsv_get_platform(hb_qsv_get_adapter_index())) >= QSV_G3)
             {
                 /*
                  * HSW TargetUsage:     6
@@ -2270,7 +2275,7 @@ int hb_qsv_param_default_preset(hb_qsv_param_t *param,
 
 int hb_qsv_param_default_async_depth()
 {
-    return qsv_hardware_generation(hb_get_qsv_platform(hb_qsv_get_adapter_index())) >= QSV_G7 ? 6 : HB_QSV_ASYNC_DEPTH_DEFAULT;
+    return hb_qsv_hardware_generation(hb_qsv_get_platform(hb_qsv_get_adapter_index())) >= QSV_G7 ? 6 : HB_QSV_ASYNC_DEPTH_DEFAULT;
 }
 
 int hb_qsv_param_default(hb_qsv_param_t *param, mfxVideoParam *videoParam,
@@ -2739,9 +2744,9 @@ static const char* hb_qsv_get_adapter_type(const mfxAdapterInfo* info)
     return NULL;
 }
 
-int hb_get_qsv_platform(int adapter_index)
+int hb_qsv_get_platform(int adapter_index)
 {
-    hb_log("hb_get_qsv_platform adapter_index=%d", adapter_index);
+    hb_log("hb_qsv_get_platform adapter_index=%d", adapter_index);
     for (int i = 0; i < g_qsv_adapters_info.NumActual; i++)
     {
         mfxAdapterInfo* info = &g_qsv_adapters_info.Adapters[i];
@@ -3260,7 +3265,7 @@ static int hb_qsv_make_adapters_list(const mfxAdaptersInfo* adapters_info, hb_li
             info->Platform.CodeName, info->Platform.DeviceId, info->Platform.MediaAdapterType, info->Number);
         if (info)
         {
-            int generation = qsv_hardware_generation(qsv_map_mfx_platform_codename(info->Platform.CodeName));
+            int generation = hb_qsv_hardware_generation(qsv_map_mfx_platform_codename(info->Platform.CodeName));
             // select default QSV adapter
             if (generation > max_generation || info->Platform.MediaAdapterType == MFX_MEDIA_DISCRETE)
             {
@@ -3899,16 +3904,11 @@ int hb_qsv_sanitize_filter_list(hb_job_t *job)
     return 0;
 }
 
-hb_list_t* hb_qsv_adapters_list()
-{
-    return g_qsv_adapters_list;
-}
-
 #else // other OS
 
-int hb_get_qsv_platform(int adapter_index)
+int hb_qsv_get_platform(int adapter_index)
 {
-    hb_log("hb_get_qsv_platform index=%d", adapter_index);
+    hb_log("hb_qsv_get_platform index=%d", adapter_index);
     return hb_get_cpu_platform();
 }
 
@@ -4016,11 +4016,6 @@ int hb_qsv_get_mid_by_surface_from_pool(HBQSVFramesContext* hb_enc_qsv_frames_ct
 int hb_qsv_release_surface_from_pool_by_surface_pointer(HBQSVFramesContext* hb_enc_qsv_frames_ctx, const mfxFrameSurface1 *surface)
 {
     return -1;
-}
-
-hb_list_t* hb_qsv_adapters_list()
-{
-    return NULL;
 }
 
 #endif

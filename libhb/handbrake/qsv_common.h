@@ -88,7 +88,9 @@ int            hb_qsv_info_init();
 void           hb_qsv_info_print();
 hb_list_t*     hb_qsv_adapters_list();
 hb_qsv_info_t* hb_qsv_info_get(int adapter_index, int encoder);
-int qsv_hardware_generation(int cpu_platform);
+int            hb_qsv_hardware_generation(int cpu_platform);
+int            hb_qsv_get_platform(int adapter_index);
+int            hb_qsv_get_adapter_index();
 
 /* Automatically load and unload any required MFX plug-ins */
 hb_list_t* hb_qsv_load_plugins  (int adapter_index, hb_qsv_info_t *info, mfxSession session, mfxVersion version);
