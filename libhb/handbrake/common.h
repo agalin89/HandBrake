@@ -732,7 +732,6 @@ struct hb_job_s
     {
         int decode;
         int async_depth;
-        //int adapter_index;
 #if HB_PROJECT_FEATURE_QSV
         hb_qsv_context *ctx;
 #endif

@@ -4226,7 +4226,6 @@ static hb_dict_t * PreparePreset(const char *preset_name)
     }
     if (qsv_adapter >= 0)
     {
-        printf("VideoQSVAdapterIndex set=%d\n validate adapter index", qsv_adapter);
         hb_dict_set(preset, "VideoQSVAdapterIndex",
                         hb_value_int(qsv_adapter));
     }

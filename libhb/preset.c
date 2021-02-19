@@ -13,6 +13,10 @@
 #include "handbrake/plist.h"
 #include "handbrake/lang.h"
 
+#if HB_PROJECT_FEATURE_QSV
+#include "handbrake/qsv_common.h"
+#endif
+
 #if defined(SYS_LINUX)
 #define HB_PRESET_PLIST_FILE    "ghb/presets"
 #define HB_PRESET_JSON_FILE     "ghb/presets.json"
@@ -168,7 +172,6 @@ static int do_preset_search(hb_value_t *preset, preset_do_context_t *do_ctx)
 
 static int preset_hw_scrub(hb_value_t *preset)
 {
-    hb_log("preset_hw_scrub");
     int disabled = 0;
     hb_value_t *val = hb_dict_get(preset, "VideoEncoder");
     if (val != NULL)
@@ -1702,7 +1705,6 @@ int hb_preset_apply_filters(const hb_dict_t *preset, hb_dict_t *job_dict)
 
 int hb_preset_apply_video(const hb_dict_t *preset, hb_dict_t *job_dict)
 {
-    hb_log("hb_preset_apply_video");
     hb_dict_t    *dest_dict, *video_dict, *qsv;
     hb_value_t   *value, *vcodec_value;
     int           mux, vcodec, vqtype, color_matrix_code;
@@ -1853,10 +1855,8 @@ int hb_preset_apply_video(const hb_dict_t *preset, hb_dict_t *job_dict)
         qsv = hb_dict_init();
         hb_dict_set(video_dict, "QSV", qsv);
     }
-    hb_log("VideoQSVDecode get");
     if ((value = hb_dict_get(preset, "VideoQSVDecode")) != NULL)
     {
-        hb_log("VideoQSVDecode get=%d", hb_value_get_bool(value));
         hb_dict_set(qsv, "Decode",
                     hb_value_xform(value, HB_VALUE_TYPE_BOOL));
     }
@@ -1865,14 +1865,11 @@ int hb_preset_apply_video(const hb_dict_t *preset, hb_dict_t *job_dict)
         hb_dict_set(qsv, "AsyncDepth",
                     hb_value_xform(value, HB_VALUE_TYPE_INT));
     }
-    hb_log("VideoQSVAdapterIndex get");
     if ((value = hb_dict_get(preset, "VideoQSVAdapterIndex")) != NULL)
     {
-        hb_log("VideoQSVAdapterIndex get=%d", hb_value_get_int(value));
         hb_dict_set(qsv, "AdapterIndex",
                     hb_value_xform(value, HB_VALUE_TYPE_INT));
     }
-    hb_log("hb_preset_apply_video end");
     return 0;
 }
 

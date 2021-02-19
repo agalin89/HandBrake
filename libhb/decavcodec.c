@@ -1402,7 +1402,6 @@ static int decodeFrame( hb_work_private_t * pv, packet_info_t * packet_info )
 
 static int decavcodecvInit( hb_work_object_t * w, hb_job_t * job )
 {
-    hb_log("decavcodecvInit");
     hb_work_private_t *pv = calloc( 1, sizeof( hb_work_private_t ) );
 
     w->private_data = pv;
@@ -1574,7 +1573,6 @@ static int decavcodecvInit( hb_work_object_t * w, hb_job_t * job )
             }
         }
     }
-    hb_log("decavcodecvInit end");
     return 0;
 }
 
@@ -2079,7 +2077,6 @@ static int get_color_matrix(int colorspace, hb_geometry_t geometry)
 
 static int decavcodecvInfo( hb_work_object_t *w, hb_work_info_t *info )
 {
-    hb_log("decavcodecvInfo");
     hb_work_private_t *pv = w->private_data;
 
     int clock_min, clock_max, clock;
@@ -2144,7 +2141,6 @@ static int decavcodecvInfo( hb_work_object_t *w, hb_work_info_t *info )
                     pv->context->pix_fmt == AV_PIX_FMT_YUVJ420P ||
                     pv->context->pix_fmt == AV_PIX_FMT_YUV420P10LE)
                 {
-                    hb_log("info->video_decode_support |= HB_DECODE_SUPPORT_QSV");
                     info->video_decode_support |= HB_DECODE_SUPPORT_QSV;
                 }
                 break;
@@ -2163,7 +2159,6 @@ static int decavcodecvInfo( hb_work_object_t *w, hb_work_info_t *info )
         }
     }
 #endif
-    hb_log("decavcodecvInfo end");
     return 1;
 }
 

@@ -448,7 +448,6 @@ void qsv_filter_close( hb_qsv_context* qsv, HB_QSV_STAGE_TYPE vpp_type ){
 
 static void hb_qsv_filter_close( hb_filter_object_t * filter )
 {
-    hb_log( "hb_qsv_filter_close" );
     hb_filter_private_t * pv = filter->private_data;
 
     if ( !pv )

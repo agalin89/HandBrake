@@ -526,7 +526,6 @@ char* hb_get_title_set_json( hb_handle_t * h )
  */
 hb_dict_t* hb_job_to_dict( const hb_job_t * job )
 {
-    hb_log("hb_job_to_dict");
     hb_dict_t * dict;
     json_error_t error;
     int subtitle_search_burn;
@@ -777,7 +776,6 @@ hb_dict_t* hb_job_to_dict( const hb_job_t * job )
     }
     if (job->encoder_options != NULL)
     {
-        hb_log("encoder_options 1");
         hb_dict_set(video_dict, "Options",
                     hb_value_string(job->encoder_options));
     }
@@ -960,7 +958,6 @@ hb_dict_t* hb_job_to_dict( const hb_job_t * job )
         }
         hb_value_array_append(subtitle_list, subtitle_dict);
     }
-    hb_log("hb_job_to_dict end");
     return dict;
 }
 
@@ -1058,7 +1055,6 @@ static int validate_audio_codec_mux(int codec, int mux, int track)
  */
 hb_job_t* hb_dict_to_job( hb_handle_t * h, hb_dict_t *dict )
 {
-    hb_log("hb_dict_to_job");
     hb_job_t * job;
     int result;
     json_error_t error;
@@ -1287,7 +1283,6 @@ hb_job_t* hb_dict_to_job( hb_handle_t * h, hb_dict_t *dict )
 #if defined(_WIN32) || defined(__MINGW32__)
     if (adapter_index >= 0)
     {
-        hb_log("hb_dict_to_job: AdapterIndex=%d", adapter_index);
         hb_qsv_param_parse_dx_index(job, adapter_index);
     }
     hb_qsv_parse_adapter_index(job);
@@ -1843,7 +1838,6 @@ hb_job_t* hb_dict_to_job( hb_handle_t * h, hb_dict_t *dict )
             }
         }
     }
-    hb_log("hb_dict_to_job end");
     return job;
 
 fail:

@@ -2901,7 +2901,6 @@ static int syncVideoWork( hb_work_object_t * w, hb_buffer_t ** buf_in,
     hb_buffer_t * in = *buf_in;
 
 #if HB_PROJECT_FEATURE_QSV
-    hb_log("syncVideoWork");
     // Fix of LA case allowing use of LA up to 40 in full encode path,
     // as currently for such support we cannot allocate >64 slices per texture
     // due to MSFT limitation, not impacting other cases

@@ -1813,7 +1813,6 @@ int hb_global_init_no_hardware()
 
 int hb_global_init()
 {
-    hb_log("hb_global_init");
     /* Print hardening status on global init */
 #if HB_PROJECT_SECURITY_HARDEN
     hb_log( "Compile-time hardening features are enabled" );
@@ -1885,7 +1884,6 @@ int hb_global_init()
 
     // Initialize the builtin presets hb_dict_t
     hb_presets_builtin_init();
-    hb_log("hb_global_init end");
     return result;
 }
 
