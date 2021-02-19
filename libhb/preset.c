@@ -2117,6 +2117,7 @@ fail:
 hb_dict_t* hb_preset_job_init(hb_handle_t *h, int title_index,
                               const hb_dict_t *preset)
 {
+    hb_log("hb_preset_job_init");
     hb_title_t *title = hb_find_title_by_index(h, title_index);
     if (title == NULL)
     {

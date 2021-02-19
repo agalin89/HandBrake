@@ -1540,8 +1540,10 @@ static void hb_add_internal( hb_handle_t * h, hb_job_t * job, hb_list_t *list_pa
         job_copy->encoder_preset = strdup(job->encoder_preset);
     if (job->encoder_tune != NULL)
         job_copy->encoder_tune = strdup(job->encoder_tune);
-    if (job->encoder_options != NULL)
+    if (job->encoder_options != NULL) {
         job_copy->encoder_options = strdup(job->encoder_options);
+        hb_log("hb_add_internal: strdup(job->encoder_options) %s", job_copy->encoder_options);
+    }
     if (job->encoder_profile != NULL)
         job_copy->encoder_profile = strdup(job->encoder_profile);
     if (job->encoder_level != NULL)

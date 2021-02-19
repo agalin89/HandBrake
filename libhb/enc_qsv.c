@@ -1012,7 +1012,7 @@ int encqsvInit(hb_work_object_t *w, hb_job_t *job)
 
     pv->is_sys_mem         = hb_qsv_full_path_is_enabled(job) ? 0 : 1; // TODO: re-implement QSV VPP filtering support
     pv->job                = job;
-    pv->qsv_info           = hb_qsv_info_get(hb_qsv_get_adapter_index(), job->vcodec);
+    pv->qsv_info           = hb_qsv_encoder_info_get(hb_qsv_get_adapter_index(), job->vcodec);
     pv->delayed_processing = hb_list_init();
     pv->last_start         = INT64_MIN;
     hb_buffer_list_clear(&pv->encoded_frames);

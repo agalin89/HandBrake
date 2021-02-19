@@ -3985,6 +3985,7 @@ hb_title_t * hb_find_title_by_index( hb_handle_t *h, int title_index )
  */
 hb_job_t * hb_job_init_by_index( hb_handle_t * h, int title_index )
 {
+    hb_log("hb_job_init_by_index");
     hb_title_t * title = hb_find_title_by_index(h, title_index);
     if (title == NULL)
         return NULL;
@@ -3993,6 +3994,7 @@ hb_job_t * hb_job_init_by_index( hb_handle_t * h, int title_index )
 
 hb_job_t * hb_job_init( hb_title_t * title )
 {
+    hb_log("hb_job_init");
     hb_job_t * job;
 
     if ( title == NULL )

@@ -944,7 +944,34 @@ static int hb_qsv_collect_adapters_details(hb_list_t *qsv_adapters_list, hb_list
     return 0;
 }
 
-static void log_capabilities(int log_level, uint64_t caps, const char *prefix)
+static void log_decoder_capabilities(int log_level, hb_qsv_adapter_details_t *adapter_details, const char *prefix)
+{
+    char buffer[128] = "";
+
+    if (hb_qsv_decode_h264_is_supported(adapter_details->index))
+    {
+        strcat(buffer, " h264");
+    }
+
+    if (hb_qsv_decode_h265_10_bit_is_supported(adapter_details->index))
+    {
+        strcat(buffer, " hevc (8bit: yes, 10bit: yes)");
+    }
+    else if (hb_qsv_decode_h265_is_supported(adapter_details->index))
+    {
+        strcat(buffer, " hevc (8bit: yes, 10bit: no)");
+    }
+
+    if (hb_qsv_decode_av1_is_supported(adapter_details->index))
+    {
+        strcat(buffer, " av1 (8bit: yes, 10bit: yes)");
+    }
+
+    hb_deep_log(log_level, "%s%s", prefix,
+                strnlen(buffer, 1) ? buffer : " no decode support");
+}
+
+static void log_encoder_capabilities(int log_level, uint64_t caps, const char *prefix)
 {
     /*
      * Note: keep the string short, as it may be logged by default.
@@ -1037,19 +1064,12 @@ static void hb_qsv_adapter_info_print(hb_qsv_adapter_details_t *adapter_details)
 
     if (adapter_details->qsv_software_version.Version)
     {
-        hb_log(" - Intel Media SDK software: API %"PRIu16".%"PRIu16" (minimum: %"PRIu16".%"PRIu16")",
+        hb_deep_log(3, " - Intel Media SDK software: API %"PRIu16".%"PRIu16" (minimum: %"PRIu16".%"PRIu16")",
                 adapter_details->qsv_software_version.Major, adapter_details->qsv_software_version.Minor,
                 HB_QSV_MINVERSION_MAJOR, HB_QSV_MINVERSION_MINOR);
     }
 
-    if (hb_qsv_decode_av1_is_supported(adapter_details->index))
-    {
-        hb_log(" - AV1 decoder: yes");
-    }
-    else
-    {
-        hb_log(" - AV1 decoder: no");
-    }
+    log_decoder_capabilities(1, adapter_details, " - Decode support: ");
 
     if (adapter_details->hb_qsv_info_avc != NULL && adapter_details->hb_qsv_info_avc->available)
     {
@@ -1059,12 +1079,12 @@ static void hb_qsv_adapter_info_print(hb_qsv_adapter_details_t *adapter_details)
                 hb_qsv_impl_get_via_name(adapter_details->hb_qsv_info_avc->implementation));
         if (adapter_details->qsv_hardware_info_avc.available)
         {
-            log_capabilities(1, adapter_details->qsv_hardware_info_avc.capabilities,
+            log_encoder_capabilities(1, adapter_details->qsv_hardware_info_avc.capabilities,
                                 "    - capabilities (hardware): ");
         }
         if (adapter_details->qsv_software_info_avc.available)
         {
-            log_capabilities(1, adapter_details->qsv_software_info_avc.capabilities,
+            log_encoder_capabilities(3, adapter_details->qsv_software_info_avc.capabilities,
                                 "    - capabilities (software): ");
         }
         else
@@ -1079,12 +1099,12 @@ static void hb_qsv_adapter_info_print(hb_qsv_adapter_details_t *adapter_details)
                    hb_qsv_impl_get_via_name(adapter_details->hb_qsv_info_hevc->implementation));
             if (adapter_details->qsv_hardware_info_hevc.available)
             {
-                log_capabilities(1, adapter_details->qsv_hardware_info_hevc.capabilities,
+                log_encoder_capabilities(1, adapter_details->qsv_hardware_info_hevc.capabilities,
                                  "    - capabilities (hardware): ");
             }
             if (adapter_details->qsv_software_info_hevc.available)
             {
-                log_capabilities(1, adapter_details->qsv_software_info_hevc.capabilities,
+                log_encoder_capabilities(3, adapter_details->qsv_software_info_hevc.capabilities,
                                  "    - capabilities (software): ");
             }
         }
@@ -1137,14 +1157,14 @@ void hb_qsv_info_print()
     }
 }
 
-hb_qsv_info_t* hb_qsv_info_get(int adapter_index, int encoder)
+hb_qsv_info_t* hb_qsv_encoder_info_get(int adapter_index, int encoder)
 {
     hb_qsv_adapter_details_t* details = hb_qsv_get_adapters_details_by_index(adapter_index);
-    hb_log("hb_qsv_info_get: adapter_index=%d, encoder=%d details=%p", adapter_index, encoder, details);
+    hb_log("hb_qsv_encoder_info_get: adapter_index=%d, encoder=%d details=%p", adapter_index, encoder, details);
 
     if (details)
     {
-        hb_log("hb_qsv_info_get: details->hb_qsv_info_avc=%p, details->hb_qsv_info_hevc=%p", details->hb_qsv_info_avc, details->hb_qsv_info_hevc);
+        hb_log("hb_qsv_encoder_info_get: details->hb_qsv_info_avc=%p, details->hb_qsv_info_hevc=%p", details->hb_qsv_info_avc, details->hb_qsv_info_hevc);
         switch (encoder)
         {
             case HB_VCODEC_QSV_H264:
@@ -1238,18 +1258,104 @@ const char* hb_qsv_decode_get_codec_name(enum AVCodecID codec_id)
     }
 }
 
+int hb_qsv_decode_h264_is_supported(int adapter_index)
+{
+    hb_log("hb_qsv_decode_h264_is_supported");
+    return hb_qsv_hardware_generation(hb_qsv_get_platform(adapter_index)) >= QSV_G1;
+}
+
+int hb_qsv_decode_h265_is_supported(int adapter_index)
+{
+    hb_log("hb_qsv_decode_h265_is_supported");
+    return hb_qsv_hardware_generation(hb_qsv_get_platform(adapter_index)) >= QSV_G5;
+}
+
+int hb_qsv_decode_h265_10_bit_is_supported(int adapter_index)
+{
+    hb_log("hb_qsv_decode_h265_10_bit_is_supported");
+    return hb_qsv_hardware_generation(hb_qsv_get_platform(adapter_index)) >= QSV_G6;
+}
+
 int hb_qsv_decode_av1_is_supported(int adapter_index)
 {
+    hb_log("hb_qsv_decode_av1_is_supported");
     return hb_qsv_hardware_generation(hb_qsv_get_platform(adapter_index)) >= QSV_G8;
+}
+
+int hb_qsv_decode_codec_supported_codec(int adapter_index, int video_codec_param, int pix_fmt)
+{
+    hb_log("hb_qsv_decode_codec_supported_codec adapter_index=%d, video_codec_param=%d, pix_fmt=%d pix_fmt2=%d", adapter_index, video_codec_param, pix_fmt, AV_PIX_FMT_YUV420P10LE);
+
+    switch (video_codec_param)
+    {
+        case AV_CODEC_ID_H264:
+            if (pix_fmt == AV_PIX_FMT_NV12     ||
+                pix_fmt == AV_PIX_FMT_YUV420P  ||
+                pix_fmt == AV_PIX_FMT_YUVJ420P ||
+                pix_fmt == AV_PIX_FMT_YUV420P10LE)
+            {
+                return hb_qsv_decode_h264_is_supported(adapter_index);
+            }
+            break;
+        case AV_CODEC_ID_HEVC:
+            if (pix_fmt == AV_PIX_FMT_NV12     ||
+                pix_fmt == AV_PIX_FMT_YUV420P  ||
+                pix_fmt == AV_PIX_FMT_YUVJ420P)
+            {
+                return hb_qsv_decode_h265_is_supported(adapter_index);
+            }
+            else if (pix_fmt == AV_PIX_FMT_YUV420P10LE)
+            {
+                return hb_qsv_decode_h265_10_bit_is_supported(adapter_index);
+            }
+            break;
+        case AV_CODEC_ID_AV1:
+            if (pix_fmt == AV_PIX_FMT_NV12     ||
+                pix_fmt == AV_PIX_FMT_YUV420P  ||
+                pix_fmt == AV_PIX_FMT_YUVJ420P ||
+                pix_fmt == AV_PIX_FMT_YUV420P10LE)
+            {
+                return hb_qsv_decode_av1_is_supported(adapter_index);
+            }
+            break;
+        default:
+            return 0;
+    }
+    return 0;
+}
+
+int hb_qsv_setup_job(hb_job_t *job)
+{
+    hb_log("hb_qsv_setup_job");
+#if defined(_WIN32) || defined(__MINGW32__)
+    if (job->qsv.ctx->dx_index >= 0)
+    {
+        hb_log("hb_dict_to_job: AdapterIndex=%d", job->qsv.ctx->dx_index);
+        hb_qsv_param_parse_dx_index(job, job->qsv.ctx->dx_index);
+    }
+    hb_qsv_parse_adapter_index(job);
+#endif
+    int async_depth_default = hb_qsv_param_default_async_depth();
+    if (job->qsv.async_depth <= 0 || job->qsv.async_depth > async_depth_default)
+    {
+        job->qsv.async_depth = async_depth_default;
+    }
+    // Make sure QSV Decode is only True if the selected QSV adapter supports decode.
+    job->qsv.decode = job->qsv.decode && hb_qsv_available();
+    hb_log("hb_qsv_setup_job end");
+    return 0;
 }
 
 int hb_qsv_decode_is_enabled(hb_job_t *job)
 {
-    hb_log("hb_qsv_decode_is_enabled");
+    if (job)
+        hb_log("hb_qsv_decode_is_enabled adapter_index=%d, job->vcodec=%d", hb_qsv_get_adapter_index(), job->vcodec);
+
     return ((job != NULL && job->qsv.decode) &&
             (job->title->video_decode_support & HB_DECODE_SUPPORT_QSV)) &&
-            (job->vcodec == HB_VCODEC_QSV_H265 ? (hb_qsv_hardware_generation(hb_qsv_get_platform(hb_qsv_get_adapter_index())) >= QSV_G5) : 1) &&
-            (job->vcodec == HB_VCODEC_QSV_H265_10BIT ? (hb_qsv_hardware_generation(hb_qsv_get_platform(hb_qsv_get_adapter_index())) >= QSV_G6) : 1);
+            hb_qsv_decode_codec_supported_codec(hb_qsv_get_adapter_index(),
+            job->title->video_codec_param, job->pix_fmt);
+
     hb_log("hb_qsv_decode_is_enabled end");
 }
 
@@ -1264,7 +1370,7 @@ int hb_qsv_hw_filters_are_enabled(hb_job_t *job)
 int hb_qsv_is_enabled(hb_job_t *job)
 {
     hb_log("hb_qsv_is_enabled");
-    return hb_qsv_decode_is_enabled(job) || hb_qsv_info_get(hb_qsv_get_adapter_index(), job->vcodec);
+    return hb_qsv_decode_is_enabled(job) || hb_qsv_encoder_info_get(hb_qsv_get_adapter_index(), job->vcodec);
 }
 
 int hb_qsv_full_path_is_enabled(hb_job_t *job)
@@ -1284,7 +1390,7 @@ int hb_qsv_full_path_is_enabled(hb_job_t *job)
     codecs_exceptions = (job->title->pix_fmt == AV_PIX_FMT_YUV420P10 && job->vcodec == HB_VCODEC_QSV_H264);
 
     qsv_full_path_is_enabled = (hb_qsv_decode_is_enabled(job) &&
-        hb_qsv_info_get(hb_qsv_get_adapter_index(), job->vcodec) &&
+        hb_qsv_encoder_info_get(hb_qsv_get_adapter_index(), job->vcodec) &&
         device_check_succeded && !job->qsv.ctx->num_cpu_filters) && !codecs_exceptions;
     hb_log("hb_qsv_full_path_is_enabled end");
     return qsv_full_path_is_enabled;
@@ -1293,7 +1399,7 @@ int hb_qsv_full_path_is_enabled(hb_job_t *job)
 int hb_qsv_copyframe_is_slow(int encoder)
 {
     hb_log("hb_qsv_copyframe_is_slow");
-    hb_qsv_info_t *info = hb_qsv_info_get(hb_qsv_get_adapter_index(), encoder);
+    hb_qsv_info_t *info = hb_qsv_encoder_info_get(hb_qsv_get_adapter_index(), encoder);
     if (info != NULL && qsv_implementation_is_hardware(info->implementation))
     {
         hb_qsv_adapter_details_t* details = hb_qsv_get_adapters_details_by_index(hb_qsv_get_adapter_index());
@@ -2704,6 +2810,7 @@ int qsv_map_mfx_platform_codename(int mfx_platform_codename)
         break;
     case MFX_PLATFORM_APOLLOLAKE: // todo
     case MFX_PLATFORM_KABYLAKE:
+        hb_log("HB_CPU_PLATFORM_INTEL_KBL found");
         platform = HB_CPU_PLATFORM_INTEL_KBL;
         break;
 #if (MFX_VERSION >= 1025) // todo
@@ -2729,6 +2836,7 @@ int qsv_map_mfx_platform_codename(int mfx_platform_codename)
     //    break;
 #endif
     default:
+        hb_log("HB_CPU_PLATFORM_UNSPECIFIED found");
         platform = HB_CPU_PLATFORM_UNSPECIFIED;
     }
     return platform;
@@ -3657,7 +3765,7 @@ int hb_create_ffmpeg_pool(hb_job_t *job, int coded_width, int coded_height, enum
                 // }
                 if ((!strcasecmp(key, "scalingmode") || !strcasecmp(key, "vpp-sm")) && hb_qsv_hw_filters_are_enabled(job))
                 {
-                    hb_qsv_info_t *info = hb_qsv_info_get(hb_qsv_get_adapter_index(), job->vcodec);
+                    hb_qsv_info_t *info = hb_qsv_encoder_info_get(hb_qsv_get_adapter_index(), job->vcodec);
                     if (info && (info->capabilities & HB_QSV_CAP_VPP_SCALING))
                     {
                         hb_value_t *value = hb_dict_iter_value(iter);
@@ -3675,7 +3783,7 @@ int hb_create_ffmpeg_pool(hb_job_t *job, int coded_width, int coded_height, enum
                 }
                 if ((!strcasecmp(key, "interpolationmethod") || !strcasecmp(key, "vpp-im")) && hb_qsv_hw_filters_are_enabled(job))
                 {
-                    hb_qsv_info_t *info = hb_qsv_info_get(hb_qsv_get_adapter_index(), job->vcodec);
+                    hb_qsv_info_t *info = hb_qsv_encoder_info_get(hb_qsv_get_adapter_index(), job->vcodec);
                     if (info && (info->capabilities & HB_QSV_CAP_VPP_INTERPOLATION))
                     {
                         hb_value_t *value = hb_dict_iter_value(iter);

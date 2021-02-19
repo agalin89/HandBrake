@@ -105,7 +105,7 @@ static void work_func( void * _work )
     time_t t = time(NULL);
     hb_log("Starting work at: %s", asctime(localtime(&t)));
     hb_log( "%d job(s) to process", hb_list_count( work->jobs ) );
-
+    hb_log( "work_func");
     while( !*work->die && ( job = hb_list_item( work->jobs, 0 ) ) )
     {
         hb_handle_t * h = job->h;
@@ -117,6 +117,7 @@ static void work_func( void * _work )
         // scan for the JSON job automatically.  This requires that we delay
         // filling the job struct till we have performed the title scan
         // because the default values for the job come from the title.
+        hb_log( "work_func job->encoder_options=%s", job->encoder_options);
         if (job->json != NULL)
         {
             hb_deep_log(1, "json job:\n%s", job->json);
@@ -127,6 +128,7 @@ static void work_func( void * _work )
             hb_json_job_scan(job->h, job->json);
 
             // Expand json string to full job struct
+            hb_log( "work_func hb_json_to_job");
             hb_job_t *new_job = hb_json_to_job(job->h, job->json);
             if (new_job == NULL)
             {
@@ -141,6 +143,10 @@ static void work_func( void * _work )
             hb_job_close(&job);
             job = new_job;
         }
+#if HB_PROJECT_FEATURE_QSV
+        hb_qsv_setup_job(job);
+#endif
+        hb_log("before hb_job_setup_passes");
         hb_job_setup_passes(job->h, job, passes);
         hb_job_close(&job);
 
@@ -827,7 +833,7 @@ static int get_best_pix_ftm(hb_job_t * job)
 {
     int bit_depth = hb_get_bit_depth(job->title->pix_fmt);
 #if HB_PROJECT_FEATURE_QSV && (defined( _WIN32 ) || defined( __MINGW32__ ))
-    if (hb_qsv_info_get(hb_qsv_get_adapter_index(), job->vcodec))
+    if (hb_qsv_encoder_info_get(hb_qsv_get_adapter_index(), job->vcodec))
     {
         if (hb_qsv_full_path_is_enabled(job))
         {

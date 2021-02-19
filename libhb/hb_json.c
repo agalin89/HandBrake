@@ -526,12 +526,12 @@ char* hb_get_title_set_json( hb_handle_t * h )
  */
 hb_dict_t* hb_job_to_dict( const hb_job_t * job )
 {
-    hb_log("hb_job_to_dict");
+    hb_log("hb_job_to_dict job->encoder_options=%s", job->encoder_options);
     hb_dict_t * dict;
     json_error_t error;
     int subtitle_search_burn;
     int ii;
-    int adapter_index;
+    int adapter_index = 0;
 
     if (job == NULL || job->title == NULL)
         return NULL;
@@ -540,13 +540,6 @@ hb_dict_t* hb_job_to_dict( const hb_job_t * job )
     // necessary PAR value
 
     subtitle_search_burn = job->select_subtitle_config.dest == RENDERSUB;
-#if HB_PROJECT_FEATURE_QSV
-#if defined(_WIN32) || defined(__MINGW32__)
-    adapter_index = hb_qsv_get_adapter_index();
-#endif
-#else
-    adapter_index = 0;
-#endif
     dict = json_pack_ex(&error, 0,
     "{"
     // SequenceID
@@ -775,6 +768,7 @@ hb_dict_t* hb_job_to_dict( const hb_job_t * job )
     {
         hb_dict_set(video_dict, "Level", hb_value_string(job->encoder_level));
     }
+    hb_log("encoder_options 0");
     if (job->encoder_options != NULL)
     {
         hb_log("encoder_options 1");
@@ -1279,25 +1273,8 @@ hb_job_t* hb_dict_to_job( hb_handle_t * h, hb_dict_t *dict )
     hb_job_set_encoder_profile(job, video_profile);
     hb_job_set_encoder_level(job, video_level);
     hb_job_set_encoder_options(job, video_options);
+    job->qsv.ctx->dx_index = adapter_index;
 
-    // Make sure QSV Decode is only True if the hardware is available.
-    // TODO: could be different adapter with no support AV1
-    job->qsv.decode = job->qsv.decode && hb_qsv_available();
-#if HB_PROJECT_FEATURE_QSV
-#if defined(_WIN32) || defined(__MINGW32__)
-    if (adapter_index >= 0)
-    {
-        hb_log("hb_dict_to_job: AdapterIndex=%d", adapter_index);
-        hb_qsv_param_parse_dx_index(job, adapter_index);
-    }
-    hb_qsv_parse_adapter_index(job);
-#endif
-    int async_depth_default = hb_qsv_param_default_async_depth();
-    if (job->qsv.async_depth <= 0 || job->qsv.async_depth > async_depth_default)
-    {
-        job->qsv.async_depth = async_depth_default;
-    }
-#endif
     // If both vbitrate and vquality were specified, vbitrate is used;
     // we need to ensure the unused rate contro mode is always set to an
     // invalid value, as if both values are valid, behavior is undefined
@@ -1853,6 +1830,7 @@ fail:
 
 hb_job_t* hb_json_to_job( hb_handle_t * h, const char * json_job )
 {
+    hb_log("hb_json_to_job");
     hb_dict_t *dict = hb_value_json(json_job);
     hb_job_t *job = hb_dict_to_job(h, dict);
     hb_value_free(&dict);
@@ -1869,6 +1847,7 @@ hb_job_t* hb_json_to_job( hb_handle_t * h, const char * json_job )
  */
 char* hb_job_init_json(hb_handle_t *h, int title_index)
 {
+    hb_log("hb_job_init_json");
     hb_job_t *job = hb_job_init_by_index(h, title_index);
     char *json_job = hb_job_to_json(job);
     hb_job_close(&job);
@@ -1878,6 +1857,7 @@ char* hb_job_init_json(hb_handle_t *h, int title_index)
 char* hb_preset_job_init_json(hb_handle_t *h, int title_index,
                               const char *json_preset)
 {
+    hb_log("hb_preset_job_init_json");
     hb_dict_t * preset   = hb_value_json(json_preset);
     hb_dict_t * job      = hb_preset_job_init(h, title_index, preset);
     char      * json_job = hb_value_get_json(job);
