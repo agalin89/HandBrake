@@ -1076,7 +1076,7 @@ int encqsvInit(hb_work_object_t *w, hb_job_t *job)
         hb_dict_free(&options_list);
     }
 #if defined(_WIN32) || defined(__MINGW32__)
-    if (pv->is_sys_mem)
+    if (pv->is_sys_mem && hb_qsv_implementation_is_hardware(pv->qsv_info->implementation))
     {
         // select the right hardware implementation based on dx index
         if (!job->qsv.ctx->qsv_device)

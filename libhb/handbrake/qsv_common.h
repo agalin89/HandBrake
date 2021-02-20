@@ -17,7 +17,7 @@ int            hb_qsv_available();
 #if HB_PROJECT_FEATURE_QSV
 
 // Public API
-//int  hb_qsv_impl_set_preferred(const char *name);
+int  hb_qsv_impl_set_preferred(const char *name);
 void hb_qsv_force_workarounds(); // for developers only
 
 #ifdef __LIBHB__
@@ -91,6 +91,7 @@ hb_qsv_info_t* hb_qsv_info_get(int adapter_index, int encoder);
 int            hb_qsv_hardware_generation(int cpu_platform);
 int            hb_qsv_get_platform(int adapter_index);
 int            hb_qsv_get_adapter_index();
+int            hb_qsv_implementation_is_hardware(mfxIMPL implementation);
 
 /* Automatically load and unload any required MFX plug-ins */
 hb_list_t* hb_qsv_load_plugins  (int adapter_index, hb_qsv_info_t *info, mfxSession session, mfxVersion version);

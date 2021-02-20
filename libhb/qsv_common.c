@@ -187,6 +187,47 @@ static hb_qsv_adapter_details_t* hb_qsv_get_adapters_details_by_index(int adapte
     return NULL;
 }
 
+static int qsv_impl_set_preferred(hb_qsv_adapter_details_t *details, const char *name)
+{
+    hb_log("qsv_impl_set_preferred %s", name);
+    if (name == NULL || details == NULL)
+    {
+        return -1;
+    }
+    if (!strcasecmp(name, "software"))
+    {
+        if (details->qsv_software_info_avc.available)
+        {
+            details->hb_qsv_info_avc = &details->qsv_software_info_avc;
+        }
+        if (details->qsv_software_info_hevc.available)
+        {
+            details->hb_qsv_info_hevc = &details->qsv_software_info_hevc;
+        }
+        return 0;
+    }
+    if (!strcasecmp(name, "hardware"))
+    {
+        if (details->qsv_hardware_info_avc.available)
+        {
+            details->hb_qsv_info_avc = &details->qsv_hardware_info_avc;
+        }
+        if (details->qsv_hardware_info_hevc.available)
+        {
+            details->hb_qsv_info_hevc = &details->qsv_hardware_info_hevc;
+        }
+        return 0;
+    }
+    return -1;
+}
+
+int hb_qsv_impl_set_preferred(const char *name)
+{
+    hb_log("hb_qsv_impl_set_preferred %s", name);
+    hb_qsv_adapter_details_t* details = hb_qsv_get_adapters_details_by_index(hb_qsv_get_adapter_index());
+    return qsv_impl_set_preferred(details, name);
+}
+
 int hb_qsv_hardware_generation(int cpu_platform)
 {
     switch (cpu_platform)
@@ -220,7 +261,7 @@ int hb_qsv_hardware_generation(int cpu_platform)
 /*
  * Determine whether a given mfxIMPL is hardware-accelerated.
  */
-static int qsv_implementation_is_hardware(mfxIMPL implementation)
+int hb_qsv_implementation_is_hardware(mfxIMPL implementation)
 {
     return MFX_IMPL_BASETYPE(implementation) != MFX_IMPL_SOFTWARE;
 }
@@ -476,7 +517,7 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
         /* Implementation-specific features that can't be queried */
         if (info->codec_id == MFX_CODEC_AVC || info->codec_id == MFX_CODEC_HEVC)
         {
-            if (qsv_implementation_is_hardware(info->implementation))
+            if (hb_qsv_implementation_is_hardware(info->implementation))
             {
                 if (hb_qsv_hardware_generation(hb_qsv_get_platform(index)) >= QSV_G3)
                 {
@@ -670,7 +711,7 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
                  * - MBBRC  requires G3 hardware (Haswell or equivalent)
                  * - ExtBRC requires G2 hardware (Ivy Bridge or equivalent)
                  */
-                if (qsv_implementation_is_hardware(info->implementation) &&
+                if (hb_qsv_implementation_is_hardware(info->implementation) &&
                     hb_qsv_hardware_generation(hb_qsv_get_platform(index)) >= QSV_G3)
                 {
                     if (extCodingOption2.MBBRC)
@@ -678,7 +719,7 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
                         info->capabilities |= HB_QSV_CAP_OPTION2_MBBRC;
                     }
                 }
-                if (qsv_implementation_is_hardware(info->implementation) &&
+                if (hb_qsv_implementation_is_hardware(info->implementation) &&
                     hb_qsv_hardware_generation(hb_qsv_get_platform(index)) >= QSV_G2)
                 {
                     if (extCodingOption2.ExtBRC)
@@ -694,7 +735,7 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
                  */
                 if (HB_CHECK_MFX_VERSION(version, 1, 7))
                 {
-                    if (qsv_implementation_is_hardware(info->implementation) &&
+                    if (hb_qsv_implementation_is_hardware(info->implementation) &&
                         hb_qsv_hardware_generation(hb_qsv_get_platform(index)) >= QSV_G3)
                     {
                         if (extCodingOption2.Trellis)
@@ -809,39 +850,6 @@ mfxIMPL hb_qsv_dx_index_to_impl(int dx_index)
     return impl;
 }
 
-static int hb_qsv_impl_set_preferred(hb_qsv_adapter_details_t *details, const char *name)
-{
-    if (name == NULL)
-    {
-        return -1;
-    }
-    if (!strcasecmp(name, "software"))
-    {
-        if (details->qsv_software_info_avc.available)
-        {
-            details->hb_qsv_info_avc = &details->qsv_software_info_avc;
-        }
-        if (details->qsv_software_info_hevc.available)
-        {
-            details->hb_qsv_info_hevc = &details->qsv_software_info_hevc;
-        }
-        return 0;
-    }
-    if (!strcasecmp(name, "hardware"))
-    {
-        if (details->qsv_hardware_info_avc.available)
-        {
-            details->hb_qsv_info_avc = &details->qsv_hardware_info_avc;
-        }
-        if (details->qsv_hardware_info_hevc.available)
-        {
-            details->hb_qsv_info_hevc = &details->qsv_hardware_info_hevc;
-        }
-        return 0;
-    }
-    return -1;
-}
-
 static int hb_qsv_collect_adapters_details(hb_list_t *qsv_adapters_list, hb_list_t *hb_qsv_adapter_details_list)
 {
     hb_log("hb_qsv_collect_adapters_details");
@@ -879,7 +887,7 @@ static int hb_qsv_collect_adapters_details(hb_list_t *qsv_adapters_list, hb_list
                 query_capabilities(session, details->index, details->qsv_software_version, &details->qsv_software_info_hevc);
                 // now that we know which hardware encoders are
                 // available, we can set the preferred implementation
-                hb_qsv_impl_set_preferred(details, "software");
+                qsv_impl_set_preferred(details, "software");
             }
             MFXClose(session);
         }
@@ -911,7 +919,7 @@ static int hb_qsv_collect_adapters_details(hb_list_t *qsv_adapters_list, hb_list
                     details->qsv_hardware_info_hevc.implementation = hb_qsv_dx_index_to_impl(*dx_index) | hw_preference;
                     // now that we know which hardware encoders are
                     // available, we can set the preferred implementation
-                    hb_qsv_impl_set_preferred(details, "hardware");
+                    qsv_impl_set_preferred(details, "hardware");
                 }
                 hb_display_close(&display);
                 MFXClose(session);
@@ -1164,7 +1172,7 @@ hb_list_t* hb_qsv_load_plugins(int index, hb_qsv_info_t *info, mfxSession sessio
         if (info->codec_id == MFX_CODEC_HEVC && !(hb_qsv_hardware_generation(hb_qsv_get_platform(index)) < QSV_G5))
         {
             if (HB_CHECK_MFX_VERSION(version, 1, 15) &&
-                qsv_implementation_is_hardware(info->implementation))
+                hb_qsv_implementation_is_hardware(info->implementation))
             {
                 if (MFXVideoUSER_Load(session, &MFX_PLUGINID_HEVCE_HW, 0) == MFX_ERR_NONE)
                 {
@@ -1259,6 +1267,7 @@ int hb_qsv_full_path_is_enabled(hb_job_t *job)
     static int device_check_succeded = 0;
     int codecs_exceptions = 0;
     int qsv_full_path_is_enabled = 0;
+    hb_qsv_info_t *info = hb_qsv_info_get(hb_qsv_get_adapter_index(), job->vcodec);
 
     if(!device_check_completed)
     {
@@ -1269,7 +1278,7 @@ int hb_qsv_full_path_is_enabled(hb_job_t *job)
     codecs_exceptions = (job->title->pix_fmt == AV_PIX_FMT_YUV420P10 && job->vcodec == HB_VCODEC_QSV_H264);
 
     qsv_full_path_is_enabled = (hb_qsv_decode_is_enabled(job) &&
-        hb_qsv_info_get(hb_qsv_get_adapter_index(), job->vcodec) &&
+        info && hb_qsv_implementation_is_hardware(info->implementation) &&
         device_check_succeded && !job->qsv.ctx->num_cpu_filters) && !codecs_exceptions;
     return qsv_full_path_is_enabled;
 }
@@ -1277,7 +1286,7 @@ int hb_qsv_full_path_is_enabled(hb_job_t *job)
 int hb_qsv_copyframe_is_slow(int encoder)
 {
     hb_qsv_info_t *info = hb_qsv_info_get(hb_qsv_get_adapter_index(), encoder);
-    if (info != NULL && qsv_implementation_is_hardware(info->implementation))
+    if (info != NULL && hb_qsv_implementation_is_hardware(info->implementation))
     {
         hb_qsv_adapter_details_t* details = hb_qsv_get_adapters_details_by_index(hb_qsv_get_adapter_index());
         if (details)
