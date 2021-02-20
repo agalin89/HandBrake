@@ -530,6 +530,7 @@ hb_dict_t* hb_job_to_dict( const hb_job_t * job )
     json_error_t error;
     int subtitle_search_burn;
     int ii;
+    int adapter_index;
 
     if (job == NULL || job->title == NULL)
         return NULL;
@@ -538,7 +539,13 @@ hb_dict_t* hb_job_to_dict( const hb_job_t * job )
     // necessary PAR value
 
     subtitle_search_burn = job->select_subtitle_config.dest == RENDERSUB;
-
+#if HB_PROJECT_FEATURE_QSV
+#if defined(_WIN32) || defined(__MINGW32__)
+    adapter_index = hb_qsv_get_adapter_index();
+#endif
+#else
+    adapter_index = 0;
+#endif
     dict = json_pack_ex(&error, 0,
     "{"
     // SequenceID
@@ -550,8 +557,8 @@ hb_dict_t* hb_job_to_dict( const hb_job_t * job )
     "s:{s:o, s:o, s:o,},"
     // PAR {Num, Den}
     "s:{s:o, s:o},"
-    // Video {Encoder, QSV {Decode, AsyncDepth}}
-    "s:{s:o, s:{s:o, s:o}},"
+    // Video {Encoder, QSV {Decode, AsyncDepth, AdapterIndex}}
+    "s:{s:o, s:{s:o, s:o, s:o}},"
     // Audio {CopyMask, FallbackEncoder, AudioList []}
     "s:{s:[], s:o, s:[]},"
     // Subtitles {Search {Enable, Forced, Default, Burn}, SubtitleList []}
@@ -580,6 +587,7 @@ hb_dict_t* hb_job_to_dict( const hb_job_t * job )
             "QSV",
                 "Decode",       hb_value_bool(job->qsv.decode),
                 "AsyncDepth",   hb_value_int(job->qsv.async_depth),
+                "AdapterIndex", hb_value_int(adapter_index),
         "Audio",
             "CopyMask",
             "FallbackEncoder",  hb_value_int(job->acodec_fallback),
@@ -1094,6 +1102,7 @@ hb_job_t* hb_dict_to_job( hb_handle_t * h, hb_dict_t *dict )
     json_int_t         range_start = -1, range_end = -1, range_seek_points = -1;
     int                vbitrate = -1;
     double             vquality = HB_INVALID_VIDEO_QUALITY;
+    int                adapter_index = -1;
 
     result = json_unpack_ex(dict, &error, 0,
     "{"
@@ -1114,7 +1123,7 @@ hb_job_t* hb_dict_to_job( hb_handle_t * h, hb_dict_t *dict )
     //       Mastering,
     //       ContentLightLevel,
     //       ColorPrimariesOverride, ColorTransferOverride, ColorMatrixOverride,
-    //       QSV {Decode, AsyncDepth}}
+    //       QSV {Decode, AsyncDepth, AdapterIndex}}
     "s:{s:o, s?F, s?i, s?s, s?s, s?s, s?s, s?s,"
     "   s?b, s?b,"
     "   s?i, s?i,"
@@ -1122,7 +1131,7 @@ hb_job_t* hb_dict_to_job( hb_handle_t * h, hb_dict_t *dict )
     "   s?o,"
     "   s?o,"
     "   s?i, s?i, s?i,"
-    "   s?{s?b, s?i}},"
+    "   s?{s?b, s?i, s?i}},"
     // Audio {CopyMask, FallbackEncoder, AudioList}
     "s?{s?o, s?o, s?o},"
     // Subtitle {Search {Enable, Forced, Default, Burn}, SubtitleList}
@@ -1177,6 +1186,7 @@ hb_job_t* hb_dict_to_job( hb_handle_t * h, hb_dict_t *dict )
             "QSV",
                 "Decode",           unpack_b(&job->qsv.decode),
                 "AsyncDepth",       unpack_i(&job->qsv.async_depth),
+                "AdapterIndex",     unpack_i(&adapter_index),
         "Audio",
             "CopyMask",             unpack_o(&acodec_copy_mask),
             "FallbackEncoder",      unpack_o(&acodec_fallback),
@@ -1197,15 +1207,6 @@ hb_job_t* hb_dict_to_job( hb_handle_t * h, hb_dict_t *dict )
         hb_error("hb_dict_to_job: failed to parse dict: %s", error.text);
         goto fail;
     }
-    // Make sure QSV Decode is only True if the hardware is available.
-    job->qsv.decode = job->qsv.decode && hb_qsv_available();
-#if HB_PROJECT_FEATURE_QSV
-    int async_depth_default = hb_qsv_param_default_async_depth();
-    if(job->qsv.async_depth <= 0 || job->qsv.async_depth > async_depth_default)
-    {
-        job->qsv.async_depth = async_depth_default;
-    }
-#endif
     // Lookup mux id
     if (hb_value_type(mux) == HB_VALUE_TYPE_STRING)
     {
@@ -1275,6 +1276,23 @@ hb_job_t* hb_dict_to_job( hb_handle_t * h, hb_dict_t *dict )
     hb_job_set_encoder_level(job, video_level);
     hb_job_set_encoder_options(job, video_options);
 
+    // Make sure QSV Decode is only True if the hardware is available.
+    // TODO: could be different adapter with no support AV1
+    job->qsv.decode = job->qsv.decode && hb_qsv_available();
+#if HB_PROJECT_FEATURE_QSV
+#if defined(_WIN32) || defined(__MINGW32__)
+    if (adapter_index >= 0)
+    {
+        hb_qsv_param_parse_dx_index(job, adapter_index);
+    }
+    hb_qsv_parse_adapter_index(job);
+#endif
+    int async_depth_default = hb_qsv_param_default_async_depth();
+    if (job->qsv.async_depth <= 0 || job->qsv.async_depth > async_depth_default)
+    {
+        job->qsv.async_depth = async_depth_default;
+    }
+#endif
     // If both vbitrate and vquality were specified, vbitrate is used;
     // we need to ensure the unused rate contro mode is always set to an
     // invalid value, as if both values are valid, behavior is undefined
