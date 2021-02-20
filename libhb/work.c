@@ -869,7 +869,7 @@ static int get_best_pix_ftm(hb_job_t * job)
 {
     int bit_depth = hb_get_bit_depth(job->title->pix_fmt);
 #if HB_PROJECT_FEATURE_QSV && (defined( _WIN32 ) || defined( __MINGW32__ ))
-    if (hb_qsv_info_get(job->vcodec))
+    if (hb_qsv_info_get(hb_qsv_get_adapter_index(), job->vcodec))
     {
         if (hb_qsv_full_path_is_enabled(job))
         {
@@ -1459,7 +1459,6 @@ static void do_job(hb_job_t *job)
 #if HB_PROJECT_FEATURE_QSV
     if (hb_qsv_is_enabled(job))
     {
-        job->qsv.ctx = hb_qsv_context_init();
 #if HB_PROJECT_FEATURE_QSV && (defined( _WIN32 ) || defined( __MINGW32__ ))
         if (hb_qsv_full_path_is_enabled(job))
         {
