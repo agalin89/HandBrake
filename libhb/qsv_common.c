@@ -180,7 +180,6 @@ static hb_qsv_adapter_details_t* hb_qsv_get_adapters_details_by_index(int adapte
         hb_qsv_adapter_details_t *details = hb_list_item(g_qsv_adapters_details_list, i);
         if (details->index == adapter_index || adapter_index == -1)
         {
-            hb_log("hb_qsv_get_adapters_details_by_index: query %d", details->index);
             return details;
         }
     }
@@ -189,7 +188,6 @@ static hb_qsv_adapter_details_t* hb_qsv_get_adapters_details_by_index(int adapte
 
 static int qsv_impl_set_preferred(hb_qsv_adapter_details_t *details, const char *name)
 {
-    hb_log("qsv_impl_set_preferred %s", name);
     if (name == NULL || details == NULL)
     {
         return -1;
@@ -223,7 +221,6 @@ static int qsv_impl_set_preferred(hb_qsv_adapter_details_t *details, const char 
 
 int hb_qsv_impl_set_preferred(const char *name)
 {
-    hb_log("hb_qsv_impl_set_preferred %s", name);
     hb_qsv_adapter_details_t* details = hb_qsv_get_adapters_details_by_index(hb_qsv_get_adapter_index());
     return qsv_impl_set_preferred(details, name);
 }
@@ -268,8 +265,6 @@ int hb_qsv_implementation_is_hardware(mfxIMPL implementation)
 
 int hb_qsv_available()
 {
-    hb_log("hb_qsv_available");
-
     if (is_hardware_disabled())
     {
         return 0;
@@ -852,14 +847,11 @@ mfxIMPL hb_qsv_dx_index_to_impl(int dx_index)
 
 static int hb_qsv_collect_adapters_details(hb_list_t *qsv_adapters_list, hb_list_t *hb_qsv_adapter_details_list)
 {
-    hb_log("hb_qsv_collect_adapters_details");
-
     for (int i = 0; i < hb_list_count(hb_qsv_adapter_details_list); i++)
     {
         int *dx_index = (int *)hb_list_item(qsv_adapters_list, i);
         hb_qsv_adapter_details_t *details = hb_list_item(hb_qsv_adapter_details_list, i);
         details->index = *dx_index;
-        hb_log("hb_qsv_collect_adapters_details: dx index %d", *dx_index);
         /*
         * First, check for any MSDK version to determine whether one or
         * more implementations are present; then check if we can use them.
@@ -2617,7 +2609,6 @@ typedef HRESULT(WINAPI *HB_PFN_CREATE_DXGI_FACTORY)(REFIID riid, void **ppFactor
 
 int hb_qsv_info_init()
 {
-    hb_log("hb_qsv_info_init");
     // Collect the information about qsv adapters
     g_qsv_adapters_info.Adapters = NULL;
     g_qsv_adapters_info.NumAlloc = 0;
@@ -2642,7 +2633,6 @@ int hb_qsv_set_adapter_index(int adapter_index)
         if (info && (info->Number == adapter_index))
         {
             g_adapter_index = adapter_index;
-            hb_log("hb_qsv_set_adapter_index: %s qsv adapter with index %d has been set", hb_qsv_get_adapter_type(info), adapter_index);
             return 0;
         }
     }
@@ -2677,36 +2667,28 @@ int qsv_map_mfx_platform_codename(int mfx_platform_codename)
         break;
     case MFX_PLATFORM_APOLLOLAKE:
     case MFX_PLATFORM_KABYLAKE:
-        hb_log("HB_CPU_PLATFORM_INTEL_KBL found");
         platform = HB_CPU_PLATFORM_INTEL_KBL;
         break;
 #if (MFX_VERSION >= 1025)
     case MFX_PLATFORM_GEMINILAKE:
     case MFX_PLATFORM_COFFEELAKE:
     case MFX_PLATFORM_CANNONLAKE:
-        hb_log("MFX_PLATFORM_COFFEELAKE found");
         platform = HB_CPU_PLATFORM_INTEL_KBL;
         break;
 #endif
 #if (MFX_VERSION >= 1027)
     case MFX_PLATFORM_ICELAKE:
-        hb_log("HB_CPU_PLATFORM_INTEL_ICL found");
         platform = HB_CPU_PLATFORM_INTEL_ICL;
         break;
 #endif
 #if (MFX_VERSION >= 1031)
     case MFX_PLATFORM_ELKHARTLAKE:
     case MFX_PLATFORM_JASPERLAKE:
-        hb_log("HB_CPU_PLATFORM_INTEL_TGL found");
-        platform = HB_CPU_PLATFORM_INTEL_TGL;
-        break;
     case MFX_PLATFORM_TIGERLAKE:
-        hb_log("HB_CPU_PLATFORM_INTEL_TGL found");
         platform = HB_CPU_PLATFORM_INTEL_TGL;
         break;
 #endif
     default:
-        hb_log("qsv: HB_CPU_PLATFORM_UNSPECIFIED found");
         platform = HB_CPU_PLATFORM_UNSPECIFIED;
     }
     return platform;
@@ -2724,7 +2706,6 @@ static const char* hb_qsv_get_adapter_type(const mfxAdapterInfo* info)
 
 int hb_qsv_get_platform(int adapter_index)
 {
-    hb_log("hb_qsv_get_platform adapter_index=%d", adapter_index);
     for (int i = 0; i < g_qsv_adapters_info.NumActual; i++)
     {
         mfxAdapterInfo* info = &g_qsv_adapters_info.Adapters[i];
@@ -2733,7 +2714,6 @@ int hb_qsv_get_platform(int adapter_index)
         // if -1 use first adapter with highest priority
         if (info && ((info->Number == adapter_index) || (adapter_index == -1)))
         {
-            hb_log("qsv: %s qsv adapter with index %d has been queried", hb_qsv_get_adapter_type(info), adapter_index);
             return qsv_map_mfx_platform_codename(info->Platform.CodeName);
         }
     }
@@ -2745,7 +2725,6 @@ int hb_qsv_param_parse_dx_index(hb_job_t *job, const int dx_index)
 {
     for (int i = 0; i < g_qsv_adapters_info.NumActual; i++)
     {
-        hb_log("hb_qsv_param_parse_dx_index iter %d", dx_index);
         mfxAdapterInfo* info = &g_qsv_adapters_info.Adapters[i];
         // find DirectX adapter with given index in list of QSV adapters
         // if -1 use first adapter with highest priority
@@ -3236,8 +3215,6 @@ static int hb_qsv_make_adapters_list(const mfxAdaptersInfo* adapters_info, hb_li
     for (int i = 0; i < adapters_info->NumActual; i++)
     {
         mfxAdapterInfo* info = &adapters_info->Adapters[i];
-        hb_log("hb_qsv_make_adapters_list: info->Platform.CodeName=%d, info->Platform.DeviceId=%d, info->Platform.MediaAdapterType=%d, info->Number=%d",
-            info->Platform.CodeName, info->Platform.DeviceId, info->Platform.MediaAdapterType, info->Number);
         if (info)
         {
             int generation = hb_qsv_hardware_generation(qsv_map_mfx_platform_codename(info->Platform.CodeName));
@@ -3246,7 +3223,6 @@ static int hb_qsv_make_adapters_list(const mfxAdaptersInfo* adapters_info, hb_li
             {
                 max_generation = generation;
                 hb_qsv_set_adapter_index(info->Number);
-                hb_log("hb_qsv_make_adapters_list: set default adapter %d", info->Number);
             }
             hb_list_add(list, (void*)&info->Number);
         }
@@ -3311,16 +3287,6 @@ static int hb_qsv_query_adapters(mfxAdaptersInfo* adapters_info)
             {
                 hb_error("hb_qsv_query_adapters: failed to collect information about Intel graphics adapters %d", sts);
                 return -1;
-            }
-            for (int i = 0; i < adapters_info->NumActual; i++)
-            {
-                mfxAdapterInfo* info = &adapters_info->Adapters[i];
-                if (info)
-                {
-                    int generation = hb_qsv_hardware_generation(qsv_map_mfx_platform_codename(info->Platform.CodeName));
-                    hb_log("hb_qsv_query_adapters: info->Platform.CodeName=%d, info->Platform.DeviceId=%d, info->Platform.MediaAdapterType=%d, info->Number=%d, generation=%d",
-                    info->Platform.CodeName, info->Platform.DeviceId, info->Platform.MediaAdapterType, info->Number, generation);
-                }
             }
         }
     }
