@@ -1977,6 +1977,7 @@ int hb_qsv_param_parse(hb_qsv_param_t *param, hb_qsv_info_t *info, hb_job_t *job
             return HB_QSV_PARAM_UNSUPPORTED;
         }
     }
+#if defined(_WIN32) || defined(__MINGW32__)
     else if (!strcasecmp(key, "gpu"))
     {
         // Check if was parsed already in decoder initialization
@@ -1989,6 +1990,7 @@ int hb_qsv_param_parse(hb_qsv_param_t *param, hb_qsv_info_t *info, hb_job_t *job
             }
         }
     }
+#endif
     else if (!strcasecmp(key, "scalingmode") ||
              !strcasecmp(key, "vpp-sm"))
     {
