@@ -530,7 +530,7 @@ hb_dict_t* hb_job_to_dict( const hb_job_t * job )
     json_error_t error;
     int subtitle_search_burn;
     int ii;
-    int adapter_index;
+    int adapter_index = 0;
 
     if (job == NULL || job->title == NULL)
         return NULL;
@@ -539,13 +539,6 @@ hb_dict_t* hb_job_to_dict( const hb_job_t * job )
     // necessary PAR value
 
     subtitle_search_burn = job->select_subtitle_config.dest == RENDERSUB;
-#if HB_PROJECT_FEATURE_QSV
-#if defined(_WIN32) || defined(__MINGW32__)
-    adapter_index = hb_qsv_get_adapter_index();
-#endif
-#else
-    adapter_index = 0;
-#endif
     dict = json_pack_ex(&error, 0,
     "{"
     // SequenceID
@@ -1275,24 +1268,8 @@ hb_job_t* hb_dict_to_job( hb_handle_t * h, hb_dict_t *dict )
     hb_job_set_encoder_profile(job, video_profile);
     hb_job_set_encoder_level(job, video_level);
     hb_job_set_encoder_options(job, video_options);
+    job->qsv.ctx->dx_index = adapter_index;
 
-    // Make sure QSV Decode is only True if the hardware is available.
-    // TODO: could be different adapter with no support AV1
-    job->qsv.decode = job->qsv.decode && hb_qsv_available();
-#if HB_PROJECT_FEATURE_QSV
-#if defined(_WIN32) || defined(__MINGW32__)
-    if (adapter_index >= 0)
-    {
-        hb_qsv_param_parse_dx_index(job, adapter_index);
-    }
-    hb_qsv_parse_adapter_index(job);
-#endif
-    int async_depth_default = hb_qsv_param_default_async_depth();
-    if (job->qsv.async_depth <= 0 || job->qsv.async_depth > async_depth_default)
-    {
-        job->qsv.async_depth = async_depth_default;
-    }
-#endif
     // If both vbitrate and vquality were specified, vbitrate is used;
     // we need to ensure the unused rate contro mode is always set to an
     // invalid value, as if both values are valid, behavior is undefined
