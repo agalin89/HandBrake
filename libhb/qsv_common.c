@@ -464,7 +464,8 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
      * Note: can error out rather than sanitizing
      * unsupported codec IDs, so don't log errors.
      */
-    if (HB_CHECK_MFX_VERSION(version, HB_QSV_MINVERSION_MAJOR, HB_QSV_MINVERSION_MINOR))
+    if (HB_CHECK_MFX_VERSION(version, HB_QSV_MINVERSION_MAJOR, HB_QSV_MINVERSION_MINOR) ||
+        HB_CHECK_MFX_VERSION(version, 2, 0))
     {
         if (info->implementation & MFX_IMPL_AUDIO)
         {
@@ -538,7 +539,8 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
             }
             else
             {
-                if (HB_CHECK_MFX_VERSION(version, 1, 6))
+                if (HB_CHECK_MFX_VERSION(version, 1, 6) ||
+                    HB_CHECK_MFX_VERSION(version, 2, 0))
                 {
                     info->capabilities |= HB_QSV_CAP_B_REF_PYRAMID;
                 }
@@ -546,7 +548,8 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
         }
 
         /* API-specific features that can't be queried */
-        if (HB_CHECK_MFX_VERSION(version, 1, 6))
+        if (HB_CHECK_MFX_VERSION(version, 1, 6) ||
+            HB_CHECK_MFX_VERSION(version, 2, 0))
         {
             // API >= 1.6 (mfxBitstream::DecodeTimeStamp, mfxExtCodingOption2)
             info->capabilities |= HB_QSV_CAP_MSDK_API_1_6;
@@ -561,7 +564,8 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
          * Also assume that LA and ICQ combined imply LA_ICQ is
          * supported, so we don't need to check the latter too.
          */
-        if (HB_CHECK_MFX_VERSION(version, 1, 7))
+        if (HB_CHECK_MFX_VERSION(version, 1, 7) ||
+            HB_CHECK_MFX_VERSION(version, 2, 0))
         {
             init_video_param(&inputParam);
             inputParam.mfx.CodecId           = info->codec_id;
@@ -594,7 +598,8 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
                 }
             }
         }
-        if (HB_CHECK_MFX_VERSION(version, 1, 8))
+        if (HB_CHECK_MFX_VERSION(version, 1, 8) ||
+            HB_CHECK_MFX_VERSION(version, 2, 0))
         {
             init_video_param(&inputParam);
             inputParam.mfx.CodecId           = info->codec_id;
@@ -614,7 +619,8 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
         /*
          * Determine whether mfxExtVideoSignalInfo is supported.
          */
-        if (HB_CHECK_MFX_VERSION(version, 1, 3))
+        if (HB_CHECK_MFX_VERSION(version, 1, 3) ||
+            HB_CHECK_MFX_VERSION(version, 2, 0))
         {
             init_video_param(&videoParam);
             videoParam.mfx.CodecId = info->codec_id;
@@ -646,7 +652,8 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
         /*
          * Determine whether mfxExtCodingOption is supported.
          */
-        if (HB_CHECK_MFX_VERSION(version, 1, 0))
+        if (HB_CHECK_MFX_VERSION(version, 1, 0) ||
+            HB_CHECK_MFX_VERSION(version, 2, 0))
         {
             init_video_param(&videoParam);
             videoParam.mfx.CodecId = info->codec_id;
@@ -682,7 +689,7 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
          * suffers from false positives instead. The latter is probably easier
          * and/or safer to sanitize for us, so use mode 1.
          */
-        if (HB_CHECK_MFX_VERSION(version, 1, 6) && info->codec_id == MFX_CODEC_AVC)
+        if ((HB_CHECK_MFX_VERSION(version, 1, 6) || HB_CHECK_MFX_VERSION(version, 2, 0)) && info->codec_id == MFX_CODEC_AVC)
         {
             init_video_param(&videoParam);
             videoParam.mfx.CodecId = info->codec_id;
@@ -740,7 +747,7 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
                  *
                  * - Trellis requires G3 hardware (Haswell or equivalent)
                  */
-                if (HB_CHECK_MFX_VERSION(version, 1, 7))
+                if (HB_CHECK_MFX_VERSION(version, 1, 7) || HB_CHECK_MFX_VERSION(version, 2, 0))
                 {
                     if (hb_qsv_implementation_is_hardware(info->implementation) &&
                         hb_qsv_hardware_generation(hb_qsv_get_platform(index)) >= QSV_G3)
@@ -759,7 +766,7 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
                  * - LookAheadDS requires lookahead support
                  * - AdaptiveI, AdaptiveB, NumMbPerSlice unknown (trust Query)
                  */
-                if (HB_CHECK_MFX_VERSION(version, 1, 8))
+                if (HB_CHECK_MFX_VERSION(version, 1, 8) || HB_CHECK_MFX_VERSION(version, 2, 0))
                 {
                     if (info->capabilities & HB_QSV_CAP_B_REF_PYRAMID)
                     {
@@ -792,14 +799,14 @@ static int query_capabilities(mfxSession session, int index, mfxVersion version,
                         info->codec_id, info->implementation, status);
             }
         }
-        if (HB_CHECK_MFX_VERSION(version, 1, 19))
+        if (HB_CHECK_MFX_VERSION(version, 1, 19) || HB_CHECK_MFX_VERSION(version, 2, 0))
         {
             if (hb_qsv_hardware_generation(hb_qsv_get_platform(index)) >= QSV_G7)
             {
                 info->capabilities |= HB_QSV_CAP_VPP_SCALING;
             }
         }
-        if (HB_CHECK_MFX_VERSION(version, 1, 33))
+        if (HB_CHECK_MFX_VERSION(version, 1, 33) || HB_CHECK_MFX_VERSION(version, 2, 0))
         {
             if (hb_qsv_hardware_generation(hb_qsv_get_platform(index)) >= QSV_G7)
             {
@@ -883,9 +890,8 @@ static int hb_qsv_collect_adapters_details(hb_list_t *qsv_adapters_list, hb_list
         {
             // Media SDK software found, but check that our minimum is supported
             MFXQueryVersion(session, &details->qsv_software_version);
-            if (HB_CHECK_MFX_VERSION(details->qsv_software_version,
-                                    HB_QSV_MINVERSION_MAJOR,
-                                    HB_QSV_MINVERSION_MINOR))
+            if (HB_CHECK_MFX_VERSION(details->qsv_software_version, HB_QSV_MINVERSION_MAJOR, HB_QSV_MINVERSION_MINOR) ||
+                HB_CHECK_MFX_VERSION(details->qsv_software_version, 2, 0))
             {
                 query_capabilities(session, details->index, details->qsv_software_version, &details->qsv_software_info_avc);
                 query_capabilities(session, details->index, details->qsv_software_version, &details->qsv_software_info_hevc);
@@ -913,9 +919,8 @@ static int hb_qsv_collect_adapters_details(hb_list_t *qsv_adapters_list, hb_list
                 // Note: this-party hardware (QSV_G0) is unsupported for the time being
                 MFXQueryVersion(session, &details->qsv_hardware_version);
                 if (hb_qsv_hardware_generation(hb_qsv_get_platform(*dx_index)) >= QSV_G1 &&
-                    HB_CHECK_MFX_VERSION(details->qsv_hardware_version,
-                                        HB_QSV_MINVERSION_MAJOR,
-                                        HB_QSV_MINVERSION_MINOR))
+                    (HB_CHECK_MFX_VERSION(details->qsv_hardware_version, HB_QSV_MINVERSION_MAJOR, HB_QSV_MINVERSION_MINOR) ||
+                     HB_CHECK_MFX_VERSION(details->qsv_hardware_version, 2, 0)))
                 {
                     query_capabilities(session, details->index, details->qsv_hardware_version, &details->qsv_hardware_info_avc);
                     details->qsv_hardware_info_avc.implementation = hb_qsv_dx_index_to_impl(*dx_index) | hw_preference;
@@ -1191,11 +1196,11 @@ hb_list_t* hb_qsv_load_plugins(int index, hb_qsv_info_t *info, mfxSession sessio
         goto fail;
     }
 
-    if (HB_CHECK_MFX_VERSION(version, 1, 8))
+    if (HB_CHECK_MFX_VERSION(version, 1, 8) || HB_CHECK_MFX_VERSION(version, 2, 0))
     {
         if (info->codec_id == MFX_CODEC_HEVC && !(hb_qsv_hardware_generation(hb_qsv_get_platform(index)) < QSV_G5))
         {
-            if (HB_CHECK_MFX_VERSION(version, 1, 15) &&
+            if ((HB_CHECK_MFX_VERSION(version, 1, 15) || HB_CHECK_MFX_VERSION(version, 2, 0)) &&
                 hb_qsv_implementation_is_hardware(info->implementation))
             {
                 if (MFXVideoUSER_Load(session, &MFX_PLUGINID_HEVCE_HW, 0) == MFX_ERR_NONE)
@@ -1203,7 +1208,7 @@ hb_list_t* hb_qsv_load_plugins(int index, hb_qsv_info_t *info, mfxSession sessio
                     hb_list_add(mfxPluginList, (void*)&MFX_PLUGINID_HEVCE_HW);
                 }
             }
-            else if (HB_CHECK_MFX_VERSION(version, 1, 15))
+            else if (HB_CHECK_MFX_VERSION(version, 1, 15) || HB_CHECK_MFX_VERSION(version, 2, 0))
             {
                 if (MFXVideoUSER_Load(session, &MFX_PLUGINID_HEVCE_SW, 0) == MFX_ERR_NONE)
                 {
@@ -1225,7 +1230,7 @@ void hb_qsv_unload_plugins(hb_list_t **_l, mfxSession session, mfxVersion versio
     mfxPluginUID *pluginUID;
     hb_list_t *mfxPluginList = *_l;
 
-    if (mfxPluginList != NULL && HB_CHECK_MFX_VERSION(version, 1, 8))
+    if (mfxPluginList != NULL && (HB_CHECK_MFX_VERSION(version, 1, 8) || HB_CHECK_MFX_VERSION(version, 2, 0)))
     {
         for (int i = 0; i < hb_list_count(mfxPluginList); i++)
         {
@@ -1393,7 +1398,8 @@ int hb_qsv_copyframe_is_slow(int encoder)
         {
             // we should really check the driver version, but since it's not
             // available, checking the API version is the best we can do :-(
-            return !HB_CHECK_MFX_VERSION(details->qsv_hardware_version, 1, 7);
+            return !(HB_CHECK_MFX_VERSION(details->qsv_hardware_version, 1, 7) ||
+                     HB_CHECK_MFX_VERSION(details->qsv_hardware_version, 2, 0));
         }
         return 0;
     }
